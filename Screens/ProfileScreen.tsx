@@ -9,7 +9,6 @@ import {
   updatePassword,
   updateProfile
 } from "firebase/auth";
-
 import { getDownloadURL, getStorage, ref, uploadBytes } from "firebase/storage";
 import React, { useState } from "react";
 import {
@@ -31,6 +30,13 @@ import {
   TouchableWithoutFeedback,
   View
 } from "react-native";
+// Add responsive screen imports
+import {
+  heightPercentageToDP as hp,
+  listenOrientationChange as lor,
+  removeOrientationListener as rol,
+  widthPercentageToDP as wp
+} from 'react-native-responsive-screen';
 
 export default function ProfileScreen({ navigation }) {
   const auth = getAuth();
@@ -60,6 +66,13 @@ export default function ProfileScreen({ navigation }) {
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
+
+    // Listen for orientation changes
+    lor();
+
+    return () => {
+      rol(); // Remove orientation listener
+    };
   }, []);
 
   // Logout
@@ -213,10 +226,10 @@ export default function ProfileScreen({ navigation }) {
             onPress={() => navigation.goBack()} 
             style={styles.backButton}
           >
-            <Ionicons name="arrow-back" size={24} color="#fff" />
+            <Ionicons name="arrow-back" size={wp('6%')} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Profile</Text>
-          <View style={{ width: 24 }} />
+          <View style={{ width: wp('6%') }} />
         </View>
       </LinearGradient>
 
@@ -229,14 +242,14 @@ export default function ProfileScreen({ navigation }) {
                 <Image source={{ uri: photoURL }} style={styles.profileImage} />
               ) : (
                 <View style={styles.profileImagePlaceholder}>
-                  <Ionicons name="person" size={40} color="#fff" />
+                  <Ionicons name="person" size={wp('10%')} color="#fff" />
                 </View>
               )}
               <View style={styles.cameraIcon}>
                 {uploading ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Ionicons name="camera" size={18} color="#fff" />
+                  <Ionicons name="camera" size={wp('4.5%')} color="#fff" />
                 )}
               </View>
             </TouchableOpacity>
@@ -258,15 +271,15 @@ export default function ProfileScreen({ navigation }) {
             
             <TouchableOpacity style={styles.menuItem} onPress={() => setPasswordModal(true)}>
               <View style={[styles.menuIcon, { backgroundColor: '#ff9f43' }]}>
-                <Ionicons name="lock-closed" size={20} color="#fff" />
+                <Ionicons name="lock-closed" size={wp('5%')} color="#fff" />
               </View>
               <Text style={styles.menuText}>Change Password</Text>
-              <Ionicons name="chevron-forward" size={20} color="#ddd" />
+              <Ionicons name="chevron-forward" size={wp('5%')} color="#ddd" />
             </TouchableOpacity>
 
             <View style={styles.menuItem}>
               <View style={[styles.menuIcon, { backgroundColor: '#54a0ff' }]}>
-                <Ionicons name="notifications" size={20} color="#fff" />
+                <Ionicons name="notifications" size={wp('5%')} color="#fff" />
               </View>
               <Text style={styles.menuText}>Email Notifications</Text>
               <Switch 
@@ -279,7 +292,7 @@ export default function ProfileScreen({ navigation }) {
 
             <View style={styles.menuItem}>
               <View style={[styles.menuIcon, { backgroundColor: '#a55eea' }]}>
-                <Ionicons name="location" size={20} color="#fff" />
+                <Ionicons name="location" size={wp('5%')} color="#fff" />
               </View>
               <Text style={styles.menuText}>Location Services</Text>
               <Switch 
@@ -294,26 +307,26 @@ export default function ProfileScreen({ navigation }) {
             
             <TouchableOpacity style={styles.menuItem}>
               <View style={[styles.menuIcon, { backgroundColor: '#fd9644' }]}>
-                <FontAwesome5 name="cog" size={18} color="#fff" />
+                <FontAwesome5 name="cog" size={wp('4.5%')} color="#fff" />
               </View>
               <Text style={styles.menuText}>App Settings</Text>
-              <Ionicons name="chevron-forward" size={20} color="#ddd" />
+              <Ionicons name="chevron-forward" size={wp('5%')} color="#ddd" />
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.menuItem}>
               <View style={[styles.menuIcon, { backgroundColor: '#26de81' }]}>
-                <Ionicons name="help-circle" size={20} color="#fff" />
+                <Ionicons name="help-circle" size={wp('5%')} color="#fff" />
               </View>
               <Text style={styles.menuText}>Help & Support</Text>
-              <Ionicons name="chevron-forward" size={20} color="#ddd" />
+              <Ionicons name="chevron-forward" size={wp('5%')} color="#ddd" />
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
               <View style={[styles.menuIcon, { backgroundColor: '#fc5c65' }]}>
-                <MaterialIcons name="logout" size={20} color="#fff" />
+                <MaterialIcons name="logout" size={wp('5%')} color="#fff" />
               </View>
               <Text style={[styles.menuText, { color: '#fc5c65' }]}>Logout</Text>
-              <Ionicons name="chevron-forward" size={20} color="#fc5c65" />
+              <Ionicons name="chevron-forward" size={wp('5%')} color="#fc5c65" />
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -330,7 +343,7 @@ export default function ProfileScreen({ navigation }) {
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Edit Profile</Text>
                 <TouchableOpacity onPress={() => setEditModal(false)}>
-                  <Ionicons name="close" size={24} color="#666" />
+                  <Ionicons name="close" size={wp('6%')} color="#666" />
                 </TouchableOpacity>
               </View>
               
@@ -365,7 +378,7 @@ export default function ProfileScreen({ navigation }) {
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Change Password</Text>
                 <TouchableOpacity onPress={() => setPasswordModal(false)}>
-                  <Ionicons name="close" size={24} color="#666" />
+                  <Ionicons name="close" size={wp('6%')} color="#666" />
                 </TouchableOpacity>
               </View>
               
@@ -417,20 +430,20 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8f9fa" 
   },
   headerGradient: {
-    paddingTop: Platform.OS === 'ios' ? 50 : 30,
-    paddingBottom: 20,
+    paddingTop: Platform.OS === 'ios' ? hp('6%') : hp('4%'),
+    paddingBottom: hp('2.5%'),
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
+    paddingHorizontal: wp('5%'),
   },
   backButton: {
-    padding: 5,
+    padding: wp('1.2%'),
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: hp('2.5%'),
     fontWeight: "bold",
     color: "#fff",
   },
@@ -439,11 +452,11 @@ const styles = StyleSheet.create({
   },
   profileSection: {
     alignItems: "center",
-    padding: 25,
+    padding: hp('3%'),
     backgroundColor: "#fff",
-    marginBottom: 10,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+    marginBottom: hp('1.2%'),
+    borderBottomLeftRadius: wp('5%'),
+    borderBottomRightRadius: wp('5%'),
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -452,17 +465,17 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     position: 'relative',
-    marginBottom: 15,
+    marginBottom: hp('2%'),
   },
   profileImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: wp('30%'),
+    height: wp('30%'),
+    borderRadius: wp('15%'),
   },
   profileImagePlaceholder: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: wp('30%'),
+    height: wp('30%'),
+    borderRadius: wp('15%'),
     backgroundColor: '#667eea',
     justifyContent: 'center',
     alignItems: 'center',
@@ -472,53 +485,54 @@ const styles = StyleSheet.create({
     bottom: 0,
     right: 0,
     backgroundColor: '#43e97b',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: wp('9%'),
+    height: wp('9%'),
+    borderRadius: wp('4.5%'),
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 3,
     borderColor: '#fff',
   },
   name: {
-    fontSize: 24,
+    fontSize: hp('3%'),
     fontWeight: "bold",
     color: "#2d3436",
-    marginBottom: 5,
+    marginBottom: hp('0.6%'),
   },
   email: {
-    fontSize: 16,
+    fontSize: hp('2%'),
     color: "#636e72",
-    marginBottom: 20,
+    marginBottom: hp('2.5%'),
   },
   editProfileButton: {
     backgroundColor: '#f1f2f6',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
+    paddingHorizontal: wp('5%'),
+    paddingVertical: hp('1.2%'),
+    borderRadius: wp('5%'),
   },
   editProfileText: {
     color: '#667eea',
     fontWeight: '600',
+    fontSize: hp('1.8%'),
   },
   menuContainer: {
-    padding: 20,
+    padding: wp('5%'),
   },
   menuSectionTitle: {
-    fontSize: 16,
+    fontSize: hp('2%'),
     fontWeight: '600',
     color: '#636e72',
-    marginBottom: 15,
-    marginTop: 10,
+    marginBottom: hp('2%'),
+    marginTop: hp('1.2%'),
   },
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 18,
-    paddingHorizontal: 15,
+    paddingVertical: hp('2.2%'),
+    paddingHorizontal: wp('4%'),
     backgroundColor: '#fff',
-    borderRadius: 15,
-    marginBottom: 10,
+    borderRadius: wp('4%'),
+    marginBottom: hp('1.2%'),
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
@@ -526,16 +540,16 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   menuIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: wp('10%'),
+    height: wp('10%'),
+    borderRadius: wp('3%'),
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 15,
+    marginRight: wp('4%'),
   },
   menuText: { 
     flex: 1, 
-    fontSize: 16, 
+    fontSize: hp('2%'), 
     color: "#2d3436",
     fontWeight: '500',
   },
@@ -546,38 +560,38 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     backgroundColor: "white",
-    borderTopLeftRadius: 25,
-    borderTopRightRadius: 25,
-    padding: 25,
-    minHeight: '40%',
+    borderTopLeftRadius: wp('6%'),
+    borderTopRightRadius: wp('6%'),
+    padding: wp('6%'),
+    minHeight: hp('40%'),
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: hp('2.5%'),
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: hp('2.5%'),
     fontWeight: "bold",
     color: "#2d3436",
   },
   modalInput: {
     borderWidth: 1,
     borderColor: "#e0e0e0",
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 15,
+    borderRadius: wp('3%'),
+    padding: hp('1.8%'),
+    marginBottom: hp('1.8%'),
     color: "#2d3436",
-    fontSize: 16,
+    fontSize: hp('2%'),
     backgroundColor: '#f8f9fa',
   },
   modalButton: {
     backgroundColor: "#667eea",
-    padding: 16,
-    borderRadius: 12,
+    padding: hp('2%'),
+    borderRadius: wp('3%'),
     alignItems: "center",
-    marginTop: 10,
+    marginTop: hp('1.2%'),
   },
   modalButtonDisabled: {
     backgroundColor: "#ccc",
@@ -585,6 +599,6 @@ const styles = StyleSheet.create({
   modalButtonText: {
     color: "#fff",
     fontWeight: "bold",
-    fontSize: 16,
+    fontSize: hp('2%'),
   },
 });
