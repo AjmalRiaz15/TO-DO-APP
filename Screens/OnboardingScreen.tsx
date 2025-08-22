@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { heightPercentageToDP as hp, widthPercentageToDP as wp } from "react-native-responsive-screen";
 
 const { width, height } = Dimensions.get('window');
 
@@ -163,16 +164,16 @@ const styles = StyleSheet.create({
     flex: 1, 
     justifyContent: 'center', 
     alignItems: 'center', 
-    padding: 25,
+    padding: wp("6%"),
   },
   logoContainer: {
-    marginBottom: 30,
+    marginBottom: hp("4%"),
     alignItems: 'center',
   },
   logoCircle: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
+    width: wp("40%"),
+    height: wp("40%"),
+    borderRadius: wp("20%"),
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -186,12 +187,12 @@ const styles = StyleSheet.create({
   },
   textContainer: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: hp("5%"),
   },
   title: { 
-    fontSize: 32, 
+    fontSize: wp("8%"), 
     fontWeight: 'bold', 
-    marginBottom: 15, 
+    marginBottom: hp("2%"), 
     color: '#fff', 
     textAlign: 'center',
     textShadowColor: 'rgba(0, 0, 0, 0.2)',
@@ -199,43 +200,43 @@ const styles = StyleSheet.create({
     textShadowRadius: 5,
   },
   subtitle: { 
-    fontSize: 16, 
+    fontSize: wp("4%"), 
     color: 'rgba(255, 255, 255, 0.9)', 
     textAlign: 'center', 
-    lineHeight: 24,
-    maxWidth: '90%',
+    lineHeight: hp("3%"),
+    maxWidth: wp("90%"),
   },
   featuresContainer: {
-    marginBottom: 40,
+    marginBottom: hp("5%"),
     width: '100%',
-    maxWidth: 300,
+    maxWidth: wp("80%"),
   },
   featureItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: hp("2%"),
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    padding: 15,
+    padding: wp("4%"),
     borderRadius: 12,
     borderLeftWidth: 4,
     borderLeftColor: '#43e97b',
   },
   featureText: {
     color: '#fff',
-    fontSize: 14,
-    marginLeft: 12,
+    fontSize: wp("3.8%"),
+    marginLeft: wp("3%"),
     fontWeight: '500',
   },
   buttonContainer: {
     width: '100%',
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: hp("4%"),
   },
   button: { 
     borderRadius: 30, 
     overflow: 'hidden',
     width: '100%',
-    maxWidth: 300,
+    maxWidth: wp("80%"),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.2,
@@ -243,7 +244,7 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   buttonGradient: { 
-    paddingVertical: 18,
+    paddingVertical: hp("2.2%"),
     borderRadius: 30,
     alignItems: 'center',
     justifyContent: 'center',
@@ -251,20 +252,20 @@ const styles = StyleSheet.create({
   },
   buttonText: { 
     color: '#fff', 
-    fontSize: 18, 
+    fontSize: wp("4.5%"), 
     fontWeight: 'bold',
-    marginRight: 10,
+    marginRight: wp("2%"),
   },
   buttonIcon: {
     marginTop: 2,
   },
   footer: {
     position: 'absolute',
-    bottom: 40,
+    bottom: hp("5%"),
   },
   footerText: {
     color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 14,
+    fontSize: wp("3.5%"),
   },
   footerLink: {
     color: '#fff',

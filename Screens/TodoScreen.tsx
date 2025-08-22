@@ -1,9 +1,24 @@
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation } from "@react-navigation/native";
-import { getAuth } from "firebase/auth";
+import {
+  onAuthStateChanged,
+  signOut
+} from "firebase/auth";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  orderBy,
+  query,
+  setDoc,
+  updateDoc,
+  where,
+  writeBatch
+} from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Keyboard,
@@ -14,8 +29,16 @@ import {
   TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
-  View,
+  View
 } from "react-native";
+import { auth, db } from "../firebaseConfig";
+// Responsive screen imports
+import {
+  heightPercentageToDP as hp,
+  listenOrientationChange as lor,
+  removeOrientationListener as rol,
+  widthPercentageToDP as wp
+} from 'react-native-responsive-screen';
 
 export default function TodoScreen() {
   const navigation = useNavigation();
@@ -26,15 +49,30 @@ export default function TodoScreen() {
   const [priority, setPriority] = useState("Low");
   const [editingId, setEditingId] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
-  const [filter, setFilter] = useState("All"); // All, Active, Completed
+  const [filter, setFilter] = useState("All");
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
-    const auth = getAuth();
-    const user = auth.currentUser;
-    if (user) {
-      setUserName(user.displayName || user.email);
-    }
-    loadTodos();
+    // Set up auth state listener
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setUser(user);
+        setUserName(user.displayName || user.email);
+        loadTodos(user.uid);
+      } else {
+        // Redirect to login if not authenticated
+        navigation.replace('Login');
+      }
+    });
+
+    // Listen for orientation changes
+    lor();
+
+    return () => {
+      unsubscribe(); // Cleanup auth listener
+      rol(); // Remove orientation listener
+    };
   }, []);
 
   useEffect(() => {
@@ -54,57 +92,112 @@ export default function TodoScreen() {
     }
   };
 
-  const saveTodos = async (data) => {
+  const loadTodos = async (userId) => {
     try {
-      await AsyncStorage.setItem("todos", JSON.stringify(data));
-    } catch (e) {
-      console.log(e);
+      setLoading(true);
+      const q = query(
+        collection(db, "todos"),
+        where("userId", "==", userId),
+        orderBy("createdAt", "desc")
+      );
+      const querySnapshot = await getDocs(q);
+      
+      const todosData = [];
+      querySnapshot.forEach((doc) => {
+        todosData.push({ id: doc.id, ...doc.data() });
+      });
+      
+      setTodos(todosData);
+      setLoading(false);
+    } catch (error) {
+      console.error("Error loading todos:", error);
+      if (error.code === 'permission-denied') {
+        Alert.alert(
+          "Permissions Error", 
+          "Please check your Firestore security rules",
+          [{ text: "OK" }]
+        );
+      } else {
+        Alert.alert("Error", "Failed to load tasks");
+      }
+      setLoading(false);
     }
   };
 
-  const loadTodos = async () => {
+  const saveTodo = async (todoData) => {
     try {
-      const stored = await AsyncStorage.getItem("todos");
-      if (stored) setTodos(JSON.parse(stored));
-    } catch (e) {
-      console.log(e);
+      if (!user) {
+        Alert.alert("Error", "You must be logged in to save tasks");
+        return;
+      }
+
+      if (editingId) {
+        // Update existing todo
+        const todoRef = doc(db, "todos", editingId);
+        await updateDoc(todoRef, {
+          text: todoData.text,
+          priority: todoData.priority,
+          updatedAt: new Date(),
+        });
+      } else {
+        // Create new todo
+        const newTodoRef = doc(collection(db, "todos"));
+        await setDoc(newTodoRef, {
+          ...todoData,
+          id: newTodoRef.id,
+          userId: user.uid,
+          completed: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      }
+      
+      // Reload todos after saving
+      loadTodos(user.uid);
+    } catch (error) {
+      console.error("Error saving todo:", error);
+      Alert.alert("Error", "Failed to save task");
     }
   };
 
   const handleAddOrEditTodo = () => {
     if (text.trim()) {
-      let updatedTodos;
-      if (editingId) {
-        updatedTodos = todos.map((todo) =>
-          todo.id === editingId ? { ...todo, text, priority } : todo
-        );
-        setEditingId(null);
-      } else {
-        updatedTodos = [
-          ...todos,
-          { id: Date.now().toString(), text, completed: false, priority },
-        ];
-      }
-      setTodos(updatedTodos);
-      saveTodos(updatedTodos);
+      const todoData = { text: text.trim(), priority };
+      saveTodo(todoData);
       setText("");
       setPriority("Low");
+      setEditingId(null);
       setModalVisible(false);
     }
   };
 
-  const toggleTodo = (id) => {
-    const updatedTodos = todos.map((todo) =>
-      todo.id === id ? { ...todo, completed: !todo.completed } : todo
-    );
-    setTodos(updatedTodos);
-    saveTodos(updatedTodos);
+  const toggleTodo = async (id) => {
+    try {
+      const todo = todos.find(t => t.id === id);
+      const todoRef = doc(db, "todos", id);
+      await updateDoc(todoRef, {
+        completed: !todo.completed,
+        updatedAt: new Date(),
+      });
+      
+      // Reload todos after updating
+      if (user) loadTodos(user.uid);
+    } catch (error) {
+      console.error("Error toggling todo:", error);
+      Alert.alert("Error", "Failed to update task");
+    }
   };
 
-  const deleteTodo = (id) => {
-    const updatedTodos = todos.filter((todo) => todo.id !== id);
-    setTodos(updatedTodos);
-    saveTodos(updatedTodos);
+  const deleteTodo = async (id) => {
+    try {
+      await deleteDoc(doc(db, "todos", id));
+      
+      // Reload todos after deleting
+      if (user) loadTodos(user.uid);
+    } catch (error) {
+      console.error("Error deleting todo:", error);
+      Alert.alert("Error", "Failed to delete task");
+    }
   };
 
   const editTodo = (item) => {
@@ -114,17 +207,52 @@ export default function TodoScreen() {
     setModalVisible(true);
   };
 
-  const clearTodos = () => {
+  const clearTodos = async () => {
     Alert.alert("Confirm", "Are you sure you want to delete all tasks?", [
       { text: "Cancel" },
       {
         text: "Yes",
         onPress: async () => {
-          setTodos([]);
-          await AsyncStorage.removeItem("todos");
+          try {
+            if (!user) {
+              Alert.alert("Error", "You must be logged in to clear tasks");
+              return;
+            }
+            
+            // Get all user's todos
+            const q = query(
+              collection(db, "todos"),
+              where("userId", "==", user.uid)
+            );
+            const querySnapshot = await getDocs(q);
+            
+            // Delete all todos in a batch
+            const batch = writeBatch(db);
+            querySnapshot.forEach((doc) => {
+              batch.delete(doc.ref);
+            });
+            
+            await batch.commit();
+            
+            // Reload todos after clearing
+            loadTodos(user.uid);
+          } catch (error) {
+            console.error("Error clearing todos:", error);
+            Alert.alert("Error", "Failed to clear tasks");
+          }
         },
       },
     ]);
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+      // Navigation will be handled by the auth state listener
+    } catch (error) {
+      console.error("Error signing out:", error);
+      Alert.alert("Error", "Failed to sign out");
+    }
   };
 
   const getPriorityColor = (priority) => {
@@ -168,7 +296,7 @@ export default function TodoScreen() {
         style={{ flex: 1, flexDirection: "row", alignItems: "center" }}
       >
         <View style={[styles.checkbox, item.completed && styles.checkedBox]}>
-          {item.completed && <Ionicons name="checkmark" size={16} color="#fff" />}
+          {item.completed && <Ionicons name="checkmark" size={wp('4%')} color="#fff" />}
         </View>
         <View style={styles.todoContent}>
           <Text
@@ -186,14 +314,23 @@ export default function TodoScreen() {
       </TouchableOpacity>
       <View style={styles.actionButtons}>
         <TouchableOpacity onPress={() => editTodo(item)} style={styles.actionButton}>
-          <Ionicons name="create-outline" size={22} color="#3498db" />
+          <Ionicons name="create-outline" size={wp('5.5%')} color="#3498db" />
         </TouchableOpacity>
         <TouchableOpacity onPress={() => deleteTodo(item.id)} style={styles.actionButton}>
-          <Ionicons name="trash-outline" size={22} color="#e74c3c" />
+          <Ionicons name="trash-outline" size={wp('5.5%')} color="#e74c3c" />
         </TouchableOpacity>
       </View>
     </View>
   );
+
+  if (!user) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4a69bd" />
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -203,9 +340,14 @@ export default function TodoScreen() {
           <Text style={styles.greeting}>Hello, {userName}</Text>
           <Text style={styles.subtitle}>What's your plan for today?</Text>
         </View>
-        <TouchableOpacity onPress={() => navigation.navigate("Profile")}>
-          <Ionicons name="person-circle-outline" size={44} color="#4A90E2" />
-        </TouchableOpacity>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity onPress={() => navigation.navigate("Profile")} style={styles.headerButton}>
+            <Ionicons name="person-circle-outline" size={wp('8.5%')} color="#4A90E2" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleSignOut} style={styles.headerButton}>
+            <Ionicons name="log-out-outline" size={wp('8.5%')} color="#e74c3c" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Filter Buttons */}
@@ -252,7 +394,12 @@ export default function TodoScreen() {
       </View>
 
       {/* Todo List */}
-      {filteredTodos.length > 0 ? (
+      {loading ? (
+        <View style={styles.emptyState}>
+          <ActivityIndicator size="large" color="#4a69bd" />
+          <Text style={styles.emptyStateText}>Loading tasks...</Text>
+        </View>
+      ) : filteredTodos.length > 0 ? (
         <FlatList
           data={filteredTodos}
           keyExtractor={(item) => item.id}
@@ -262,7 +409,7 @@ export default function TodoScreen() {
         />
       ) : (
         <View style={styles.emptyState}>
-          <Ionicons name="checkmark-done-circle-outline" size={60} color="#ddd" />
+          <Ionicons name="checkmark-done-circle-outline" size={wp('15%')} color="#ddd" />
           <Text style={styles.emptyStateText}>No tasks found</Text>
           <Text style={styles.emptyStateSubtext}>
             {filter === "All" 
@@ -275,7 +422,7 @@ export default function TodoScreen() {
       {/* Clear All Button */}
       {todos.length > 0 && (
         <TouchableOpacity style={styles.clearButton} onPress={clearTodos}>
-          <Ionicons name="trash-outline" size={20} color="#fff" />
+          <Ionicons name="trash-outline" size={wp('5%')} color="#fff" />
           <Text style={styles.clearText}>Clear All</Text>
         </TouchableOpacity>
       )}
@@ -285,7 +432,7 @@ export default function TodoScreen() {
         style={styles.fab}
         onPress={() => setModalVisible(true)}
       >
-        <Ionicons name="add" size={30} color="#fff" />
+        <Ionicons name="add" size={wp('7.5%')} color="#fff" />
       </TouchableOpacity>
 
       {/* Add/Edit Task Modal */}
@@ -363,36 +510,53 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f9f9f9",
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingHorizontal: wp('5%'),
+    paddingTop: Platform.OS === 'ios' ? hp('6%') : hp('4%'),
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f9f9f9',
+  },
+  loadingText: {
+    marginTop: hp('1%'),
+    fontSize: hp('2%'),
+    color: '#747d8c',
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: hp('2.5%'),
+  },
+  headerButtons: {
+    flexDirection: 'row',
+  },
+  headerButton: {
+    marginLeft: wp('4%'),
   },
   greeting: {
-    fontSize: 24,
+    fontSize: hp('3%'),
     fontWeight: "bold",
     color: "#2f3542",
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: hp('1.8%'),
     color: "#747d8c",
-    marginTop: 4,
+    marginTop: hp('0.5%'),
   },
   filterContainer: {
     flexDirection: "row",
     backgroundColor: "#f1f2f6",
-    borderRadius: 10,
-    padding: 4,
-    marginBottom: 20,
+    borderRadius: wp('2.5%'),
+    padding: wp('1%'),
+    marginBottom: hp('2.5%'),
   },
   filterButton: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: hp('1%'),
+    borderRadius: wp('2%'),
     alignItems: "center",
   },
   activeFilter: {
@@ -404,7 +568,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   filterText: {
-    fontSize: 14,
+    fontSize: hp('1.8%'),
     color: "#747d8c",
     fontWeight: "500",
   },
@@ -415,10 +579,10 @@ const styles = StyleSheet.create({
   statsContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 20,
+    marginBottom: hp('2.5%'),
     backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: wp('3%'),
+    padding: wp('4%'),
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
@@ -429,24 +593,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   statNumber: {
-    fontSize: 20,
+    fontSize: hp('2.5%'),
     fontWeight: "bold",
     color: "#2f3542",
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: hp('1.6%'),
     color: "#747d8c",
-    marginTop: 4,
+    marginTop: hp('0.5%'),
   },
   listContainer: {
-    paddingBottom: 100,
+    paddingBottom: hp('12%'),
   },
   todoItem: {
     flexDirection: "row",
     backgroundColor: "#fff",
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
+    padding: wp('4%'),
+    borderRadius: wp('3%'),
+    marginBottom: hp('1.5%'),
     alignItems: "center",
     borderLeftWidth: 4,
     shadowColor: "#000",
@@ -456,12 +620,12 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
+    width: wp('5.5%'),
+    height: wp('5.5%'),
+    borderRadius: wp('1.5%'),
     borderWidth: 2,
     borderColor: "#ddd",
-    marginRight: 12,
+    marginRight: wp('3%'),
     alignItems: "center",
     justifyContent: "center",
   },
@@ -473,9 +637,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   todoText: {
-    fontSize: 16,
+    fontSize: hp('2%'),
     color: "#2f3542",
-    marginBottom: 4,
+    marginBottom: hp('0.5%'),
   },
   completed: {
     textDecorationLine: "line-through",
@@ -486,42 +650,42 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   priorityLabel: {
-    fontSize: 12,
+    fontSize: hp('1.6%'),
     fontWeight: "500",
   },
   actionButtons: {
     flexDirection: "row",
   },
   actionButton: {
-    padding: 8,
-    marginLeft: 8,
+    padding: wp('2%'),
+    marginLeft: wp('2%'),
   },
   emptyState: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 60,
+    paddingVertical: hp('7%'),
   },
   emptyStateText: {
-    fontSize: 18,
+    fontSize: hp('2.2%'),
     color: "#747d8c",
     fontWeight: "600",
-    marginTop: 16,
+    marginTop: hp('2%'),
   },
   emptyStateSubtext: {
-    fontSize: 14,
+    fontSize: hp('1.8%'),
     color: "#a4b0be",
-    marginTop: 8,
+    marginTop: hp('1%'),
   },
   clearButton: {
     position: "absolute",
-    bottom: 90,
+    bottom: hp('11%'),
     alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#ff6b6b",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 25,
+    paddingHorizontal: wp('4%'),
+    paddingVertical: hp('1.2%'),
+    borderRadius: wp('6%'),
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
@@ -531,15 +695,16 @@ const styles = StyleSheet.create({
   clearText: {
     color: "#fff",
     fontWeight: "600",
-    marginLeft: 6,
+    marginLeft: wp('1.5%'),
+    fontSize: hp('1.8%'),
   },
   fab: {
     position: "absolute",
-    bottom: 30,
-    right: 20,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    bottom: hp('3%'),
+    right: wp('5%'),
+    width: wp('15%'),
+    height: wp('15%'),
+    borderRadius: wp('7.5%'),
     backgroundColor: "#4a69bd",
     alignItems: "center",
     justifyContent: "center",
@@ -554,14 +719,14 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
+    padding: wp('5%'),
   },
   modalContent: {
     backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 24,
+    borderRadius: wp('4%'),
+    padding: wp('6%'),
     width: "100%",
-    maxWidth: 400,
+    maxWidth: wp('90%'),
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -569,42 +734,42 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: hp('2.5%'),
     fontWeight: "bold",
     color: "#2f3542",
-    marginBottom: 20,
+    marginBottom: hp('2.5%'),
     textAlign: "center",
   },
   modalInput: {
     borderWidth: 1,
     borderColor: "#ddd",
-    borderRadius: 10,
-    padding: 14,
-    fontSize: 16,
-    minHeight: 100,
+    borderRadius: wp('2.5%'),
+    padding: wp('3.5%'),
+    fontSize: hp('2%'),
+    minHeight: hp('12%'),
     textAlignVertical: "top",
-    marginBottom: 20,
+    marginBottom: hp('2.5%'),
   },
   priorityTitle: {
-    fontSize: 16,
+    fontSize: hp('2%'),
     fontWeight: "600",
     color: "#2f3542",
-    marginBottom: 12,
+    marginBottom: hp('1.5%'),
   },
   priorityOptions: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 24,
+    marginBottom: hp('3%'),
   },
   priorityOption: {
     flex: 1,
-    paddingVertical: 10,
-    marginHorizontal: 4,
-    borderRadius: 10,
+    paddingVertical: hp('1.2%'),
+    marginHorizontal: wp('1%'),
+    borderRadius: wp('2.5%'),
     alignItems: "center",
   },
   priorityOptionText: {
-    fontSize: 14,
+    fontSize: hp('1.8%'),
     fontWeight: "600",
   },
   modalButtons: {
@@ -613,10 +778,10 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 10,
+    paddingVertical: hp('1.7%'),
+    borderRadius: wp('2.5%'),
     alignItems: "center",
-    marginHorizontal: 6,
+    marginHorizontal: wp('1.5%'),
   },
   cancelButton: {
     backgroundColor: "#f1f2f6",
@@ -624,6 +789,7 @@ const styles = StyleSheet.create({
   cancelButtonText: {
     color: "#747d8c",
     fontWeight: "600",
+    fontSize: hp('1.8%'),
   },
   saveButton: {
     backgroundColor: "#4a69bd",
@@ -634,5 +800,6 @@ const styles = StyleSheet.create({
   saveButtonText: {
     color: "#fff",
     fontWeight: "600",
+    fontSize: hp('1.8%'),
   },
 });

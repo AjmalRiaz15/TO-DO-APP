@@ -1,9 +1,19 @@
 import { FontAwesome5, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from 'expo-linear-gradient';
-import { EmailAuthProvider, getAuth, reauthenticateWithCredential, signOut, updatePassword, updateProfile } from "firebase/auth";
+import {
+  EmailAuthProvider,
+  getAuth,
+  reauthenticateWithCredential,
+  signOut,
+  updatePassword,
+  updateProfile
+} from "firebase/auth";
+
+import { getDownloadURL, getStorage, ref, uploadBytes } from "firebase/storage";
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   Easing,
@@ -24,12 +34,14 @@ import {
 
 export default function ProfileScreen({ navigation }) {
   const auth = getAuth();
+  const storage = getStorage();
   const user = auth.currentUser;
 
   const [isLocationOn, setIsLocationOn] = useState(false);
   const [isEmailNotiOn, setIsEmailNotiOn] = useState(true);
   const [displayName, setDisplayName] = useState(user?.displayName || "");
   const [photoURL, setPhotoURL] = useState(user?.photoURL || null);
+  const [uploading, setUploading] = useState(false);
 
   // Password states
   const [oldPassword, setOldPassword] = useState("");
@@ -71,8 +83,56 @@ export default function ProfileScreen({ navigation }) {
     );
   };
 
+  // Function to convert URI to Blob (needed for Firebase upload)
+  const uriToBlob = (uri) => {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.onload = function() {
+        resolve(xhr.response);
+      };
+      xhr.onerror = function() {
+        reject(new Error('Failed to convert URI to blob'));
+      };
+      xhr.responseType = 'blob';
+      xhr.open('GET', uri, true);
+      xhr.send(null);
+    });
+  };
+
+  // Upload image to Firebase Storage
+  const uploadImage = async (uri) => {
+    setUploading(true);
+    
+    try {
+      // Convert image to blob
+      const blob = await uriToBlob(uri);
+      
+      // Create a reference to the file in Firebase Storage
+      // Using user UID as filename to ensure uniqueness
+      const storageRef = ref(storage, `profileImages/${user.uid}`);
+      
+      // Upload the file
+      const snapshot = await uploadBytes(storageRef, blob);
+      
+      // Get the download URL
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      
+      // Update user profile with the new photo URL
+      await updateProfile(user, { photoURL: downloadURL });
+      setPhotoURL(downloadURL);
+      
+      Alert.alert("Success", "Profile image updated successfully!");
+    } catch (error) {
+      console.error("Error uploading image:", error);
+      Alert.alert("Error", "Failed to upload image. Please try again.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   // Pick Image
   const pickImage = async () => {
+    // Request permissions
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     
     if (status !== 'granted') {
@@ -80,6 +140,7 @@ export default function ProfileScreen({ navigation }) {
       return;
     }
 
+    // Launch image picker
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
@@ -89,9 +150,7 @@ export default function ProfileScreen({ navigation }) {
 
     if (!result.canceled) {
       const uri = result.assets[0].uri;
-      setPhotoURL(uri);
-      await updateProfile(user, { photoURL: uri });
-      Alert.alert("Success", "Profile image updated successfully!");
+      await uploadImage(uri);
     }
   };
 
@@ -165,7 +224,7 @@ export default function ProfileScreen({ navigation }) {
         <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
           {/* Profile Section */}
           <View style={styles.profileSection}>
-            <TouchableOpacity onPress={pickImage} style={styles.imageContainer}>
+            <TouchableOpacity onPress={pickImage} style={styles.imageContainer} disabled={uploading}>
               {photoURL ? (
                 <Image source={{ uri: photoURL }} style={styles.profileImage} />
               ) : (
@@ -174,7 +233,11 @@ export default function ProfileScreen({ navigation }) {
                 </View>
               )}
               <View style={styles.cameraIcon}>
-                <Ionicons name="camera" size={18} color="#fff" />
+                {uploading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="camera" size={18} color="#fff" />
+                )}
               </View>
             </TouchableOpacity>
             

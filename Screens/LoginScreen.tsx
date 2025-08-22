@@ -7,7 +7,6 @@ import { Controller, useForm } from 'react-hook-form';
 import {
   Alert,
   Animated,
-  Dimensions,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -18,10 +17,9 @@ import {
   TouchableWithoutFeedback,
   View
 } from 'react-native';
+import { heightPercentageToDP as hp, widthPercentageToDP as wp } from "react-native-responsive-screen"; // ✅ added
 import * as Yup from 'yup';
 import { auth } from "../firebaseConfig";
-
-const { width, height } = Dimensions.get('window');
 
 const loginSchema = Yup.object().shape({
   email: Yup.string().email('Invalid email').required('Email is required'),
@@ -69,18 +67,19 @@ export default function LoginScreen({ navigation }) {
   });
 
   return (
-    <LinearGradient 
-      colors={['#667eea', '#764ba2']} 
+    <LinearGradient
+      colors={['#667eea', '#764ba2']}
       style={styles.container}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <KeyboardAvoidingView 
+        <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.keyboardAvoid}
         >
           <View style={styles.logoContainer}>
             <Animated.View style={[styles.logoCircle, { opacity }]}>
-              <Ionicons name="checkmark-circle" size={80} color="#fff" />
+              <Ionicons name="checkmark-circle" size={wp("20%")} color="#fff" /> 
+              {/* ✅ responsive icon */}
             </Animated.View>
             <Animated.Text style={[styles.appTitle, { opacity }]}>
               TaskFlow
@@ -90,20 +89,20 @@ export default function LoginScreen({ navigation }) {
             </Text>
           </View>
 
-          <Animated.View 
+          <Animated.View
             style={[
-              styles.formContainer, 
-              { 
+              styles.formContainer,
+              {
                 transform: [{ translateY }],
                 opacity
               }
             ]}
           >
             <Text style={styles.formTitle}>Welcome Back</Text>
-            
+
             {/* Email */}
             <View style={styles.inputContainer}>
-              <Ionicons name="mail-outline" size={20} color="#999" style={styles.inputIcon} />
+              <Ionicons name="mail-outline" size={wp("5%")} color="#999" style={styles.inputIcon} />
               <Controller
                 control={control}
                 name="email"
@@ -122,14 +121,14 @@ export default function LoginScreen({ navigation }) {
             </View>
             {errors.email && (
               <View style={styles.errorContainer}>
-                <Ionicons name="alert-circle" size={14} color="#ff6b6b" />
+                <Ionicons name="alert-circle" size={wp("3.5%")} color="#ff6b6b" />
                 <Text style={styles.error}>{errors.email.message}</Text>
               </View>
             )}
 
             {/* Password */}
             <View style={styles.inputContainer}>
-              <Ionicons name="lock-closed-outline" size={20} color="#999" style={styles.inputIcon} />
+              <Ionicons name="lock-closed-outline" size={wp("5%")} color="#999" style={styles.inputIcon} />
               <Controller
                 control={control}
                 name="password"
@@ -145,20 +144,20 @@ export default function LoginScreen({ navigation }) {
                   />
                 )}
               />
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={() => setSecureText(!secureText)}
                 style={styles.eyeIcon}
               >
-                <Ionicons 
-                  name={secureText ? "eye-off-outline" : "eye-outline"} 
-                  size={20} 
-                  color="#999" 
+                <Ionicons
+                  name={secureText ? "eye-off-outline" : "eye-outline"}
+                  size={wp("5%")}
+                  color="#999"
                 />
               </TouchableOpacity>
             </View>
             {errors.password && (
               <View style={styles.errorContainer}>
-                <Ionicons name="alert-circle" size={14} color="#ff6b6b" />
+                <Ionicons name="alert-circle" size={wp("3.5%")} color="#ff6b6b" />
                 <Text style={styles.error}>{errors.password.message}</Text>
               </View>
             )}
@@ -169,19 +168,19 @@ export default function LoginScreen({ navigation }) {
             </TouchableOpacity>
 
             {/* Login Button */}
-            <TouchableOpacity 
-              style={[styles.button, isLoading && styles.buttonDisabled]} 
+            <TouchableOpacity
+              style={[styles.button, isLoading && styles.buttonDisabled]}
               onPress={handleSubmit(login)}
               disabled={isLoading}
             >
-              <LinearGradient 
-                colors={isLoading ? ['#ccc', '#ccc'] : ['#43e97b', '#38f9d7']} 
+              <LinearGradient
+                colors={isLoading ? ['#ccc', '#ccc'] : ['#43e97b', '#38f9d7']}
                 style={styles.buttonGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
               >
                 {isLoading ? (
-                  <Ionicons name="refresh" size={24} color="#fff" style={styles.loadingIcon} />
+                  <Ionicons name="refresh" size={wp("6%")} color="#fff" style={styles.loadingIcon} />
                 ) : (
                   <Text style={styles.buttonText}>Login</Text>
                 )}
@@ -210,7 +209,7 @@ export default function LoginScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { 
+  container: {
     flex: 1,
   },
   keyboardAvoid: {
@@ -219,34 +218,34 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: 40,
-    paddingHorizontal: 20,
+    marginBottom: hp("5%"),
+    paddingHorizontal: wp("5%"),
   },
   logoCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: wp("30%"),
+    height: wp("30%"),
+    borderRadius: wp("15%"),
     backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: hp("2%"),
   },
   appTitle: {
-    fontSize: 36,
+    fontSize: wp("9%"),
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 8,
+    marginBottom: hp("1%"),
   },
   appSubtitle: {
-    fontSize: 16,
+    fontSize: wp("4%"),
     color: 'rgba(255,255,255,0.8)',
     textAlign: 'center',
   },
   formContainer: {
     backgroundColor: 'rgba(255,255,255,0.95)',
-    marginHorizontal: 20,
+    marginHorizontal: wp("5%"),
     borderRadius: 20,
-    padding: 25,
+    padding: wp("6%"),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.1,
@@ -254,10 +253,10 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   formTitle: {
-    fontSize: 24,
+    fontSize: wp("6%"),
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 25,
+    marginBottom: hp("3%"),
     textAlign: 'center',
   },
   inputContainer: {
@@ -265,46 +264,46 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#f8f9fa',
     borderRadius: 12,
-    marginBottom: 10,
-    paddingHorizontal: 15,
-    height: 55,
+    marginBottom: hp("1.5%"),
+    paddingHorizontal: wp("4%"),
+    height: hp("7%"),
   },
   inputIcon: {
-    marginRight: 10,
+    marginRight: wp("2%"),
   },
   input: {
     flex: 1,
-    fontSize: 16,
+    fontSize: wp("4%"),
     color: '#333',
     height: '100%',
   },
   eyeIcon: {
-    padding: 5,
+    padding: wp("1%"),
   },
   errorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 15,
-    marginTop: -5,
+    marginBottom: hp("2%"),
+    marginTop: -hp("0.5%"),
   },
   error: {
     color: '#ff6b6b',
-    marginLeft: 5,
-    fontSize: 12,
+    marginLeft: wp("1%"),
+    fontSize: wp("3%"),
   },
   forgotPassword: {
     alignSelf: 'flex-end',
-    marginBottom: 20,
+    marginBottom: hp("2%"),
   },
   forgotText: {
     color: '#667eea',
-    fontSize: 14,
+    fontSize: wp("3.5%"),
   },
   button: {
     borderRadius: 12,
     overflow: 'hidden',
-    marginBottom: 20,
-    height: 55,
+    marginBottom: hp("3%"),
+    height: hp("7%"),
   },
   buttonDisabled: {
     opacity: 0.7,
@@ -317,16 +316,16 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: wp("4.5%"),
     fontWeight: 'bold',
   },
   loadingIcon: {
-    marginRight: 10,
+    marginRight: wp("2%"),
   },
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: hp("3%"),
   },
   dividerLine: {
     flex: 1,
@@ -335,8 +334,8 @@ const styles = StyleSheet.create({
   },
   dividerText: {
     color: '#6c757d',
-    marginHorizontal: 10,
-    fontSize: 14,
+    marginHorizontal: wp("2%"),
+    fontSize: wp("3.5%"),
   },
   signupContainer: {
     flexDirection: 'row',
@@ -344,11 +343,11 @@ const styles = StyleSheet.create({
   },
   signupText: {
     color: '#6c757d',
-    fontSize: 14,
+    fontSize: wp("3.5%"),
   },
   signupLink: {
     color: '#667eea',
-    fontSize: 14,
+    fontSize: wp("3.5%"),
     fontWeight: 'bold',
   },
 });

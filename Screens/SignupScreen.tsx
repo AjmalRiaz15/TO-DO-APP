@@ -4,6 +4,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import React, { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
+import { heightPercentageToDP as hp, widthPercentageToDP as wp } from "react-native-responsive-screen";
+
 import {
   Alert,
   Animated,
@@ -55,8 +57,8 @@ export default function SignupScreen({ navigation }) {
     setIsLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
-      await updateProfile(userCredential.user, { 
-        displayName: data.name 
+      await updateProfile(userCredential.user, {
+        displayName: data.name
       });
       Alert.alert("Success", "Account created successfully!");
       navigation.replace('Login');
@@ -82,12 +84,12 @@ export default function SignupScreen({ navigation }) {
   });
 
   return (
-    <LinearGradient 
-      colors={['#764ba2', '#667eea']} 
+    <LinearGradient
+      colors={['#764ba2', '#667eea']}
       style={styles.container}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <KeyboardAvoidingView 
+        <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.keyboardAvoid}
         >
@@ -104,17 +106,17 @@ export default function SignupScreen({ navigation }) {
               </Text>
             </View>
 
-            <Animated.View 
+            <Animated.View
               style={[
-                styles.formContainer, 
-                { 
+                styles.formContainer,
+                {
                   transform: [{ translateY }],
                   opacity
                 }
               ]}
             >
               <Text style={styles.formTitle}>Create Account</Text>
-              
+
               {/* Name */}
               <View style={styles.inputContainer}>
                 <Ionicons name="person-outline" size={20} color="#999" style={styles.inputIcon} />
@@ -185,14 +187,14 @@ export default function SignupScreen({ navigation }) {
                     />
                   )}
                 />
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={() => setShowPassword(!showPassword)}
                   style={styles.eyeIcon}
                 >
-                  <Ionicons 
-                    name={showPassword ? "eye-off-outline" : "eye-outline"} 
-                    size={20} 
-                    color="#999" 
+                  <Ionicons
+                    name={showPassword ? "eye-off-outline" : "eye-outline"}
+                    size={20}
+                    color="#999"
                   />
                 </TouchableOpacity>
               </View>
@@ -221,14 +223,14 @@ export default function SignupScreen({ navigation }) {
                     />
                   )}
                 />
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={() => setShowConfirmPassword(!showConfirmPassword)}
                   style={styles.eyeIcon}
                 >
-                  <Ionicons 
-                    name={showConfirmPassword ? "eye-off-outline" : "eye-outline"} 
-                    size={20} 
-                    color="#999" 
+                  <Ionicons
+                    name={showConfirmPassword ? "eye-off-outline" : "eye-outline"}
+                    size={20}
+                    color="#999"
                   />
                 </TouchableOpacity>
               </View>
@@ -239,15 +241,15 @@ export default function SignupScreen({ navigation }) {
                 </View>
               )}
 
-          
+
               {/* Sign Up Button */}
-              <TouchableOpacity 
-                style={[styles.button, isLoading && styles.buttonDisabled]} 
+              <TouchableOpacity
+                style={[styles.button, isLoading && styles.buttonDisabled]}
                 onPress={handleSubmit(signup)}
                 disabled={isLoading}
               >
-                <LinearGradient 
-                  colors={isLoading ? ['#ccc', '#ccc'] : ['#43e97b', '#38f9d7']} 
+                <LinearGradient
+                  colors={isLoading ? ['#ccc', '#ccc'] : ['#43e97b', '#38f9d7']}
                   style={styles.buttonGradient}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
@@ -283,7 +285,7 @@ export default function SignupScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { 
+  container: {
     flex: 1,
   },
   keyboardAvoid: {
@@ -292,38 +294,39 @@ const styles = StyleSheet.create({
   scrollContainer: {
     flexGrow: 1,
     justifyContent: 'center',
-    paddingVertical: 20,
+    paddingVertical: hp("2%"),
   },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: 30,
-    paddingHorizontal: 20,
+    marginBottom: hp("4%"),
+    paddingHorizontal: wp("5%"),
   },
   logoCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: wp("25%"),
+    height: wp("25%"),
+    borderRadius: wp("12.5%"),
     backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: hp("2%"),
   },
   appTitle: {
-    fontSize: 28,
+    fontSize: wp("7%"),
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 8,
+    marginBottom: hp("1%"),
+    textAlign: "center",
   },
   appSubtitle: {
-    fontSize: 14,
+    fontSize: wp("3.8%"),
     color: 'rgba(255,255,255,0.8)',
     textAlign: 'center',
   },
   formContainer: {
     backgroundColor: 'rgba(255,255,255,0.95)',
-    marginHorizontal: 20,
-    borderRadius: 20,
-    padding: 25,
+    marginHorizontal: wp("5%"),
+    borderRadius: wp("5%"),
+    padding: wp("6%"),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.1,
@@ -331,71 +334,71 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   formTitle: {
-    fontSize: 22,
+    fontSize: wp("6%"),
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 20,
+    marginBottom: hp("2%"),
     textAlign: 'center',
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#f8f9fa',
-    borderRadius: 12,
-    marginBottom: 10,
-    paddingHorizontal: 15,
-    height: 50,
+    borderRadius: wp("3%"),
+    marginBottom: hp("1.5%"),
+    paddingHorizontal: wp("4%"),
+    height: hp("6%"),
   },
   inputIcon: {
-    marginRight: 10,
+    marginRight: wp("2%"),
   },
   input: {
     flex: 1,
-    fontSize: 15,
+    fontSize: wp("4%"),
     color: '#333',
     height: '100%',
   },
   eyeIcon: {
-    padding: 5,
+    padding: wp("2%"),
   },
   errorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 15,
-    marginTop: -5,
+    marginBottom: hp("2%"),
+    marginTop: -hp("0.5%"),
   },
   error: {
     color: '#ff6b6b',
-    marginLeft: 5,
-    fontSize: 12,
+    marginLeft: wp("2%"),
+    fontSize: wp("3.2%"),
   },
   requirementsContainer: {
     backgroundColor: '#f1f2f6',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 20,
+    borderRadius: wp("3%"),
+    padding: wp("4%"),
+    marginBottom: hp("2.5%"),
   },
   requirementsTitle: {
-    fontSize: 14,
+    fontSize: wp("3.8%"),
     fontWeight: '600',
     color: '#2f3542',
-    marginBottom: 8,
+    marginBottom: hp("1%"),
   },
   requirementItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: hp("0.5%"),
   },
   requirementText: {
-    fontSize: 12,
+    fontSize: wp("3.2%"),
     color: '#57606f',
-    marginLeft: 6,
+    marginLeft: wp("1.5%"),
   },
   button: {
-    borderRadius: 12,
+    borderRadius: wp("3%"),
     overflow: 'hidden',
-    marginBottom: 20,
-    height: 50,
+    marginBottom: hp("2.5%"),
+    height: hp("6.5%"),
   },
   buttonDisabled: {
     opacity: 0.7,
@@ -408,16 +411,16 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: wp("4.5%"),
     fontWeight: 'bold',
   },
   loadingIcon: {
-    marginRight: 10,
+    marginRight: wp("2%"),
   },
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: hp("2.5%"),
   },
   dividerLine: {
     flex: 1,
@@ -426,8 +429,8 @@ const styles = StyleSheet.create({
   },
   dividerText: {
     color: '#6c757d',
-    marginHorizontal: 10,
-    fontSize: 14,
+    marginHorizontal: wp("2%"),
+    fontSize: wp("3.5%"),
   },
   loginContainer: {
     flexDirection: 'row',
@@ -435,11 +438,11 @@ const styles = StyleSheet.create({
   },
   loginText: {
     color: '#6c757d',
-    fontSize: 14,
+    fontSize: wp("3.5%"),
   },
   loginLink: {
     color: '#667eea',
-    fontSize: 14,
+    fontSize: wp("3.5%"),
     fontWeight: 'bold',
   },
 });
