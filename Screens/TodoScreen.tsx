@@ -1,9 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import {
-  onAuthStateChanged,
-  signOut
-} from "firebase/auth";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
   deleteDoc,
@@ -20,6 +17,7 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   FlatList,
   Keyboard,
   Modal,
@@ -35,8 +33,6 @@ import { auth, db } from "../firebaseConfig";
 // Responsive screen imports
 import {
   heightPercentageToDP as hp,
-  listenOrientationChange as lor,
-  removeOrientationListener as rol,
   widthPercentageToDP as wp
 } from 'react-native-responsive-screen';
 
@@ -52,6 +48,9 @@ export default function TodoScreen() {
   const [filter, setFilter] = useState("All");
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
+  const [orientation, setOrientation] = useState(
+    Dimensions.get('window').height >= Dimensions.get('window').width ? 'portrait' : 'landscape'
+  );
 
   useEffect(() => {
     // Set up auth state listener
@@ -66,12 +65,17 @@ export default function TodoScreen() {
       }
     });
 
-    // Listen for orientation changes
-    lor();
+    // Set up orientation listener with updated API
+    const dimensionChangeSubscription = Dimensions.addEventListener(
+      'change',
+      ({ window }) => {
+        setOrientation(window.height >= window.width ? 'portrait' : 'landscape');
+      }
+    );
 
     return () => {
       unsubscribe(); // Cleanup auth listener
-      rol(); // Remove orientation listener
+      dimensionChangeSubscription?.remove(); // Cleanup orientation listener using the new API
     };
   }, []);
 
@@ -245,14 +249,21 @@ export default function TodoScreen() {
     ]);
   };
 
-  const handleSignOut = async () => {
-    try {
-      await signOut(auth);
-      // Navigation will be handled by the auth state listener
-    } catch (error) {
-      console.error("Error signing out:", error);
-      Alert.alert("Error", "Failed to sign out");
+  const handleChatNavigation = () => {
+    if (!user) {
+      Alert.alert("Error", "You must be logged in to access chat");
+      navigation.replace('Login');
+      return;
     }
+    
+    // Navigate to Chat screen with user info
+    navigation.navigate("Chat", { 
+      userId: user.uid,
+      userName: user.displayName || user.email,
+      // Add these parameters to match what your ChatScreen expects
+      chatName: `${user.displayName || user.email}'s Chat`,
+      chatImage: user.photoURL || null
+    });
   };
 
   const getPriorityColor = (priority) => {
@@ -341,11 +352,11 @@ export default function TodoScreen() {
           <Text style={styles.subtitle}>What's your plan for today?</Text>
         </View>
         <View style={styles.headerButtons}>
+          <TouchableOpacity onPress={handleChatNavigation} style={styles.headerButton}>
+            <Ionicons name="chatbubble-ellipses-outline" size={wp('8.5%')} color="#4A90E2" />
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate("Profile")} style={styles.headerButton}>
             <Ionicons name="person-circle-outline" size={wp('8.5%')} color="#4A90E2" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleSignOut} style={styles.headerButton}>
-            <Ionicons name="log-out-outline" size={wp('8.5%')} color="#e74c3c" />
           </TouchableOpacity>
         </View>
       </View>

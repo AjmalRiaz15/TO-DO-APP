@@ -1,9 +1,10 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
 
-import ProfileScreen from '@/Screens/ProfileScreen';
+import ChatScreen from '../Screens/ChatScreen';
 import LoginScreen from '../Screens/LoginScreen';
 import OnboardingScreen from '../Screens/OnboardingScreen';
+import ProfileScreen from '../Screens/ProfileScreen';
 import SignupScreen from '../Screens/SignupScreen';
 import TodoScreen from '../Screens/TodoScreen';
 
@@ -18,6 +19,7 @@ export default function App() {
             <Stack.Screen name="Signup" component={SignupScreen} />
             <Stack.Screen name="Todo" component={TodoScreen} />
             <Stack.Screen name="Profile" component={ProfileScreen} />
+            <Stack.Screen name="Chat" component={ChatScreen} />
         </Stack.Navigator>
 
     );
