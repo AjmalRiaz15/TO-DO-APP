@@ -63,8 +63,8 @@ export default function ProfileScreen({ navigation }) {
 
   // Password visibility toggle
   const [secureCurrentText, setSecureCurrentText] = useState(true);
-    const [secureNewText, setSecureNewText] = useState(true);
-      const [secureConfirmText, setSecureConfirmText] = useState(true);
+  const [secureNewText, setSecureNewText] = useState(true);
+  const [secureConfirmText, setSecureConfirmText] = useState(true);
 
 
 
@@ -414,7 +414,7 @@ export default function ProfileScreen({ navigation }) {
                   <Ionicons name="close" size={wp('6%')} color="#666" />
                 </TouchableOpacity>
               </View>
-              
+
               <Text style={styles.inputLabel}>Current Password</Text>
               <View style={styles.passwordContainer}>
                 <TextInput
@@ -425,14 +425,14 @@ export default function ProfileScreen({ navigation }) {
                   placeholderTextColor="#999"
                   secureTextEntry={secureCurrentText}
                 />
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.eyeIcon}
                   onPress={() => setSecureCurrentText(!secureCurrentText)}
                 >
-                  <Ionicons 
-                    name={secureCurrentText ? "eye-off" : "eye"} 
-                    size={wp('5%')} 
-                    color="#999" 
+                  <Ionicons
+                    name={secureCurrentText ? "eye-off" : "eye"}
+                    size={wp('5%')}
+                    color="#999"
                   />
                 </TouchableOpacity>
               </View>
@@ -440,53 +440,53 @@ export default function ProfileScreen({ navigation }) {
 
               <View>
 
-              <Text style={styles.inputLabel}>New Password</Text>
-              <TextInput
-                style={[styles.modalInput, errors.newPassword && styles.inputError]}
-                value={newPassword}
-                onChangeText={setNewPassword}
-                placeholder="Enter new password"
-                placeholderTextColor="#999"
-                secureTextEntry = {secureNewText}
-              />
+                <Text style={styles.inputLabel}>New Password</Text>
+                <TextInput
+                  style={[styles.modalInput, errors.newPassword && styles.inputError]}
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  placeholder="Enter new password"
+                  placeholderTextColor="#999"
+                  secureTextEntry={secureNewText}
+                />
 
-               <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.eyeIcon}
                   onPress={() => setSecureNewText(!secureNewText)}
                 >
-                  <Ionicons 
-                    name={secureNewText ? "eye-off" : "eye"} 
-                    size={wp('5%')} 
-                    color="#999" 
+                  <Ionicons
+                    name={secureNewText ? "eye-off" : "eye"}
+                    size={wp('5%')}
+                    color="#999"
                   />
                 </TouchableOpacity>
 
               </View>
-             
+
               {errors.newPassword && <Text style={styles.errorText}>{errors.newPassword}</Text>}
 
               <View>
 
-              <Text style={styles.inputLabel}>Confirm New Password</Text>
-              <TextInput
-                style={[styles.modalInput, errors.confirmPassword && styles.inputError]}
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                placeholder="Confirm new password"
-                placeholderTextColor="#999"
-                secureTextEntry ={secureConfirmText}
-              />
-               <TouchableOpacity 
+                <Text style={styles.inputLabel}>Confirm New Password</Text>
+                <TextInput
+                  style={[styles.modalInput, errors.confirmPassword && styles.inputError]}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  placeholder="Confirm new password"
+                  placeholderTextColor="#999"
+                  secureTextEntry={secureConfirmText}
+                />
+                <TouchableOpacity
                   style={styles.eyeIcon}
                   onPress={() => setSecureConfirmText(!secureConfirmText)}
                 >
-                  <Ionicons 
-                    name={secureConfirmText ? "eye-off" : "eye"} 
-                    size={wp('5%')} 
-                    color="#999" 
+                  <Ionicons
+                    name={secureConfirmText ? "eye-off" : "eye"}
+                    size={wp('5%')}
+                    color="#999"
                   />
                 </TouchableOpacity>
-                </View>
+              </View>
               {errors.confirmPassword && <Text style={styles.errorText}>{errors.confirmPassword}</Text>}
 
               <TouchableOpacity
@@ -671,7 +671,7 @@ const styles = StyleSheet.create({
     color: "#2d3436",
     fontSize: hp('2%'),
     backgroundColor: '#f8f9fa',
-  width:wp('88%')
+    width: wp('88%')
   },
   passwordContainer: {
     flexDirection: 'row',

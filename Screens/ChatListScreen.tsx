@@ -1,10 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, getDocs, onSnapshot } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
+import { collection, getDocs } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   RefreshControl,
   SafeAreaView,
@@ -78,26 +77,6 @@ const ChatListScreen = ({ navigation }) => {
   };
 
   // For real-time updates (optional)
-  const setupRealTimeUsersListener = (currentUserId) => {
-    const usersRef = collection(db, 'users');
-    
-    return onSnapshot(usersRef, (querySnapshot) => {
-      const usersList = [];
-      querySnapshot.forEach((doc) => {
-        const userData = doc.data();
-        if (userData.uid !== currentUserId) {
-          usersList.push({
-            uid: userData.uid,
-            email: userData.email,
-            displayName: userData.displayName || userData.name || userData.email.split('@')[0],
-          });
-        }
-      });
-      setUsers(usersList);
-    }, (error) => {
-      console.error('Real-time users listener error:', error);
-    });
-  };
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -106,26 +85,6 @@ const ChatListScreen = ({ navigation }) => {
     }
   };
 
-  const handleSignOut = () => {
-    Alert.alert(
-      "Sign Out",
-      "Are you sure you want to sign out?",
-      [
-        {
-          text: "Cancel",
-          style: "cancel"
-        },
-        { 
-          text: "Yes", 
-          onPress: () => {
-            signOut(auth).catch(error => {
-              Alert.alert("Error", error.message);
-            });
-          }
-        }
-      ]
-    );
-  };
 
   const renderUserItem = ({ item }) => {
     // Ensure consistent chat ID format

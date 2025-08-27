@@ -1,4 +1,3 @@
-// App.tsx
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { onAuthStateChanged } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
@@ -38,18 +37,18 @@ export default function App() {
 
   return (
 
-      <Stack.Navigator 
-        initialRouteName={user ? "Todo" : "Onboarding"} 
-        screenOptions={{ headerShown: false }}
-      >
-        <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-        <Stack.Screen name="Login" component={LoginScreen} />
-        <Stack.Screen name="Signup" component={SignupScreen} />
-        <Stack.Screen name="Todo" component={TodoScreen} />
-        <Stack.Screen name="Profile" component={ProfileScreen} />
-        <Stack.Screen name="Chat" component={ChatScreen} />
-        <Stack.Screen name="ChatList" component={ChatListScreen} />
-      </Stack.Navigator>
-    
+    <Stack.Navigator
+      initialRouteName={user ? "Todo" : "Onboarding"}
+      screenOptions={{ headerShown: false }}
+    >
+      <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+      <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="Signup" component={SignupScreen} />
+      <Stack.Screen name="Todo" component={TodoScreen} />
+      <Stack.Screen name="Profile" component={ProfileScreen} />
+      <Stack.Screen name="Chat" component={ChatScreen} />
+      <Stack.Screen name="ChatList" component={ChatListScreen} />
+    </Stack.Navigator>
+
   );
 }
