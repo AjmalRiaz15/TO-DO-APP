@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { onAuthStateChanged } from 'firebase/auth';
-import { get, off, onValue, orderByChild, push, query, ref, set } from 'firebase/database';
+import { get, off, onValue, orderByChild, push, query, ref, set, update } from 'firebase/database';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -30,6 +30,7 @@ const ChatScreen = ({ route, navigation }) => {
   const [messageText, setMessageText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [chatInitialized, setChatInitialized] = useState(false);
+  const [sending, setSending] = useState(false);
   const flatListRef = useRef(null);
 
   useEffect(() => {
@@ -54,15 +55,11 @@ const ChatScreen = ({ route, navigation }) => {
 
   const initializeChat = async (user) => {
     try {
-      // First, ensure the chat exists with proper participants
       const chatRef = ref(database, `chats/${chatId}`);
-      
-      // Check if chat exists
       const chatSnapshot = await get(chatRef);
       
       if (!chatSnapshot.exists()) {
-        console.log('Creating new chat:', chatId);
-        // Create the chat structure if it doesn't exist
+        
         await set(chatRef, {
           participants: {
             [user.uid]: true,
@@ -71,9 +68,14 @@ const ChatScreen = ({ route, navigation }) => {
           lastMessage: '',
           lastMessageTime: Date.now(),
         });
-        console.log('Chat created successfully');
       } else {
-        console.log('Chat already exists');
+        // Ensure current user is a participant
+        const participants = chatSnapshot.val().participants || {};
+        if (!participants[user.uid]) {
+          await update(ref(database, `chats/${chatId}/participants`), {
+            [user.uid]: true
+          });
+        }
       }
       
       setChatInitialized(true);
@@ -133,21 +135,33 @@ const ChatScreen = ({ route, navigation }) => {
   };
 
   const handleSendMessage = async () => {
-    if (!messageText.trim() || !currentUser) return;
+    if (!messageText.trim() || !currentUser || sending) return;
     
+    setSending(true);
     try {
       // First, ensure the chat exists with proper participants
       const chatRef = ref(database, `chats/${chatId}`);
       
-      // Set up the chat structure if it doesn't exist
-      await set(chatRef, {
-        participants: {
-          [currentUser.uid]: true,
-          [recipient.uid]: true
-        },
-        lastMessage: messageText.trim(),
-        lastMessageTime: Date.now(),
-      }, { merge: true });
+      // Check if chat exists and get current data
+      const chatSnapshot = await get(chatRef);
+      
+      if (!chatSnapshot.exists()) {
+        // Create the chat structure if it doesn't exist
+        await set(chatRef, {
+          participants: {
+            [currentUser.uid]: true,
+            [recipient.uid]: true
+          },
+          lastMessage: messageText.trim(),
+          lastMessageTime: Date.now(),
+        });
+      } else {
+        // Only update last message and time for existing chats
+        await update(chatRef, {
+          lastMessage: messageText.trim(),
+          lastMessageTime: Date.now(),
+        });
+      }
       
       // Now send the message
       const messagesRef = ref(database, `chats/${chatId}/messages`);
@@ -174,6 +188,8 @@ const ChatScreen = ({ route, navigation }) => {
       } else {
         Alert.alert('Error', 'Failed to send message: ' + error.message);
       }
+    } finally {
+      setSending(false);
     }
   };
 
@@ -304,6 +320,12 @@ const ChatScreen = ({ route, navigation }) => {
             flatListRef.current.scrollToEnd({ animated: true });
           }
         }}
+        onLayout={() => {
+          if (flatListRef.current && messages.length > 0) {
+            flatListRef.current.scrollToEnd({ animated: false });
+          }
+        }}
+        inverted={false} // Ensure this is false to start from bottom
         ListEmptyComponent={
           <View style={styles.emptyChatContainer}>
             <Ionicons name="chatbubbles-outline" size={wp('15%')} color="#ccc" />
@@ -330,11 +352,15 @@ const ChatScreen = ({ route, navigation }) => {
           maxLength={500}
         />
         <TouchableOpacity
-          style={[styles.sendButton, !messageText.trim() && styles.disabledButton]}
+          style={[styles.sendButton, (!messageText.trim() || sending) && styles.disabledButton]}
           onPress={handleSendMessage}
-          disabled={!messageText.trim()}
+          disabled={!messageText.trim() || sending}
         >
-          <Ionicons name="send" size={wp('4.5%')} color="#fff" />
+          {sending ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Ionicons name="send" size={wp('4.5%')} color="#fff" />
+          )}
         </TouchableOpacity>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -423,6 +449,8 @@ const styles = StyleSheet.create({
   messagesContent: {
     padding: wp('4%'),
     paddingBottom: hp('1%'),
+    flexGrow: 1, // This ensures content starts from bottom
+    justifyContent: 'flex-end',
   },
   messageContainer: {
     flexDirection: 'row',
