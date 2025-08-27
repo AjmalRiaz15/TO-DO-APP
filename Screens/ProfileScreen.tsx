@@ -30,11 +30,10 @@ import {
   TouchableWithoutFeedback,
   View
 } from "react-native";
+import * as Yup from "yup";
 // Add responsive screen imports
 import {
   heightPercentageToDP as hp,
-  listenOrientationChange as lor,
-  removeOrientationListener as rol,
   widthPercentageToDP as wp
 } from 'react-native-responsive-screen';
 
@@ -54,10 +53,20 @@ export default function ProfileScreen({ navigation }) {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
+  // Form validation errors
+  const [errors, setErrors] = useState({});
+
   // Modals
   const [editModal, setEditModal] = useState(false);
   const [passwordModal, setPasswordModal] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
+
+  // Password visibility toggle
+  const [secureCurrentText, setSecureCurrentText] = useState(true);
+    const [secureNewText, setSecureNewText] = useState(true);
+      const [secureConfirmText, setSecureConfirmText] = useState(true);
+
+
 
   React.useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -67,13 +76,45 @@ export default function ProfileScreen({ navigation }) {
       useNativeDriver: true,
     }).start();
 
-    // Listen for orientation changes
-    lor();
-
     return () => {
-      rol(); // Remove orientation listener
+      // Cleanup function - no need to remove orientation listener anymore
     };
   }, []);
+
+  // Yup validation schema
+  const passwordSchema = Yup.object().shape({
+    oldPassword: Yup.string().required('Current password is required'),
+    newPassword: Yup.string()
+      .min(6, 'Password must be at least 6 characters')
+      .matches(
+        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
+        'Password must contain at least one uppercase letter, one lowercase letter, and one number'
+      )
+      .required('New password is required'),
+    confirmPassword: Yup.string()
+      .oneOf([Yup.ref('newPassword'), null], 'Passwords must match')
+      .required('Confirm password is required'),
+  });
+
+  // Validate form using Yup
+  const validateForm = async () => {
+    try {
+      await passwordSchema.validate({
+        oldPassword,
+        newPassword,
+        confirmPassword
+      }, { abortEarly: false });
+      setErrors({});
+      return true;
+    } catch (error) {
+      const validationErrors = {};
+      error.inner.forEach(err => {
+        validationErrors[err.path] = err.message;
+      });
+      setErrors(validationErrors);
+      return false;
+    }
+  };
 
   // Logout
   const handleLogout = async () => {
@@ -85,8 +126,8 @@ export default function ProfileScreen({ navigation }) {
           text: "Cancel",
           style: "cancel"
         },
-        { 
-          text: "Logout", 
+        {
+          text: "Logout",
           onPress: async () => {
             await signOut(auth);
             navigation.replace("Login");
@@ -100,10 +141,10 @@ export default function ProfileScreen({ navigation }) {
   const uriToBlob = (uri) => {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.onload = function() {
+      xhr.onload = function () {
         resolve(xhr.response);
       };
-      xhr.onerror = function() {
+      xhr.onerror = function () {
         reject(new Error('Failed to convert URI to blob'));
       };
       xhr.responseType = 'blob';
@@ -115,25 +156,25 @@ export default function ProfileScreen({ navigation }) {
   // Upload image to Firebase Storage
   const uploadImage = async (uri) => {
     setUploading(true);
-    
+
     try {
       // Convert image to blob
       const blob = await uriToBlob(uri);
-      
+
       // Create a reference to the file in Firebase Storage
       // Using user UID as filename to ensure uniqueness
       const storageRef = ref(storage, `profileImages/${user.uid}`);
-      
+
       // Upload the file
       const snapshot = await uploadBytes(storageRef, blob);
-      
+
       // Get the download URL
       const downloadURL = await getDownloadURL(snapshot.ref);
-      
+
       // Update user profile with the new photo URL
       await updateProfile(user, { photoURL: downloadURL });
       setPhotoURL(downloadURL);
-      
+
       Alert.alert("Success", "Profile image updated successfully!");
     } catch (error) {
       console.error("Error uploading image:", error);
@@ -147,7 +188,7 @@ export default function ProfileScreen({ navigation }) {
   const pickImage = async () => {
     // Request permissions
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    
+
     if (status !== 'granted') {
       Alert.alert("Permission required", "Sorry, we need camera roll permissions to change your profile picture.");
       return;
@@ -173,7 +214,7 @@ export default function ProfileScreen({ navigation }) {
       Alert.alert("Error", "Please enter a valid name");
       return;
     }
-    
+
     try {
       await updateProfile(user, { displayName: displayName.trim() });
       Alert.alert("Success", "Name updated successfully!");
@@ -185,18 +226,8 @@ export default function ProfileScreen({ navigation }) {
 
   // Change Password
   const changePassword = async () => {
-    if (!oldPassword || !newPassword || !confirmPassword) {
-      Alert.alert("Error", "Please fill all fields");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      Alert.alert("Error", "New passwords do not match!");
-      return;
-    }
-    if (newPassword.length < 6) {
-      Alert.alert("Error", "Password must be at least 6 characters long");
-      return;
-    }
+    const isValid = await validateForm();
+    if (!isValid) return;
 
     try {
       const credential = EmailAuthProvider.credential(user.email, oldPassword);
@@ -207,23 +238,24 @@ export default function ProfileScreen({ navigation }) {
       setOldPassword("");
       setNewPassword("");
       setConfirmPassword("");
+      setErrors({});
     } catch (error) {
-      Alert.alert("Error", "Old password is incorrect!");
+      Alert.alert("Error", "Current password is incorrect!");
     }
   };
 
   return (
     <View style={styles.container}>
       {/* Header */}
-      <LinearGradient 
-        colors={['#667eea', '#764ba2']} 
+      <LinearGradient
+        colors={['#667eea', '#764ba2']}
         style={styles.headerGradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
       >
         <View style={styles.header}>
-          <TouchableOpacity 
-            onPress={() => navigation.goBack()} 
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
             style={styles.backButton}
           >
             <Ionicons name="arrow-back" size={wp('6%')} color="#fff" />
@@ -253,11 +285,11 @@ export default function ProfileScreen({ navigation }) {
                 )}
               </View>
             </TouchableOpacity>
-            
+
             <Text style={styles.name}>{displayName || "User Name"}</Text>
             <Text style={styles.email}>{user?.email}</Text>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.editProfileButton}
               onPress={() => setEditModal(true)}
             >
@@ -268,7 +300,7 @@ export default function ProfileScreen({ navigation }) {
           {/* Menu Items */}
           <View style={styles.menuContainer}>
             <Text style={styles.menuSectionTitle}>Account Settings</Text>
-            
+
             <TouchableOpacity style={styles.menuItem} onPress={() => setPasswordModal(true)}>
               <View style={[styles.menuIcon, { backgroundColor: '#ff9f43' }]}>
                 <Ionicons name="lock-closed" size={wp('5%')} color="#fff" />
@@ -282,8 +314,8 @@ export default function ProfileScreen({ navigation }) {
                 <Ionicons name="notifications" size={wp('5%')} color="#fff" />
               </View>
               <Text style={styles.menuText}>Email Notifications</Text>
-              <Switch 
-                value={isEmailNotiOn} 
+              <Switch
+                value={isEmailNotiOn}
                 onValueChange={setIsEmailNotiOn}
                 trackColor={{ false: '#ddd', true: '#43e97b' }}
                 thumbColor={isEmailNotiOn ? '#fff' : '#f4f3f4'}
@@ -295,8 +327,8 @@ export default function ProfileScreen({ navigation }) {
                 <Ionicons name="location" size={wp('5%')} color="#fff" />
               </View>
               <Text style={styles.menuText}>Location Services</Text>
-              <Switch 
-                value={isLocationOn} 
+              <Switch
+                value={isLocationOn}
                 onValueChange={setIsLocationOn}
                 trackColor={{ false: '#ddd', true: '#43e97b' }}
                 thumbColor={isLocationOn ? '#fff' : '#f4f3f4'}
@@ -304,7 +336,7 @@ export default function ProfileScreen({ navigation }) {
             </View>
 
             <Text style={styles.menuSectionTitle}>Preferences</Text>
-            
+
             <TouchableOpacity style={styles.menuItem}>
               <View style={[styles.menuIcon, { backgroundColor: '#fd9644' }]}>
                 <FontAwesome5 name="cog" size={wp('4.5%')} color="#fff" />
@@ -336,7 +368,7 @@ export default function ProfileScreen({ navigation }) {
       <Modal visible={editModal} transparent animationType="slide" onRequestClose={() => setEditModal(false)}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <View style={styles.modalOverlay}>
-            <KeyboardAvoidingView 
+            <KeyboardAvoidingView
               behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
               style={styles.modalContainer}
             >
@@ -346,7 +378,8 @@ export default function ProfileScreen({ navigation }) {
                   <Ionicons name="close" size={wp('6%')} color="#666" />
                 </TouchableOpacity>
               </View>
-              
+
+              <Text style={styles.inputLabel}>Name</Text>
               <TextInput
                 style={styles.modalInput}
                 value={displayName}
@@ -354,9 +387,9 @@ export default function ProfileScreen({ navigation }) {
                 placeholder="Enter your name"
                 placeholderTextColor="#999"
               />
-              
-              <TouchableOpacity 
-                style={[styles.modalButton, !displayName.trim() && styles.modalButtonDisabled]} 
+
+              <TouchableOpacity
+                style={[styles.modalButton, !displayName.trim() && styles.modalButtonDisabled]}
                 onPress={updateUserName}
                 disabled={!displayName.trim()}
               >
@@ -371,7 +404,7 @@ export default function ProfileScreen({ navigation }) {
       <Modal visible={passwordModal} transparent animationType="slide" onRequestClose={() => setPasswordModal(false)}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <View style={styles.modalOverlay}>
-            <KeyboardAvoidingView 
+            <KeyboardAvoidingView
               behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
               style={styles.modalContainer}
             >
@@ -382,35 +415,82 @@ export default function ProfileScreen({ navigation }) {
                 </TouchableOpacity>
               </View>
               
+              <Text style={styles.inputLabel}>Current Password</Text>
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  style={[styles.modalInput, errors.oldPassword && styles.inputError]}
+                  value={oldPassword}
+                  onChangeText={setOldPassword}
+                  placeholder="Enter current password"
+                  placeholderTextColor="#999"
+                  secureTextEntry={secureCurrentText}
+                />
+                <TouchableOpacity 
+                  style={styles.eyeIcon}
+                  onPress={() => setSecureCurrentText(!secureCurrentText)}
+                >
+                  <Ionicons 
+                    name={secureCurrentText ? "eye-off" : "eye"} 
+                    size={wp('5%')} 
+                    color="#999" 
+                  />
+                </TouchableOpacity>
+              </View>
+              {errors.oldPassword && <Text style={styles.errorText}>{errors.oldPassword}</Text>}
+
+              <View>
+
+              <Text style={styles.inputLabel}>New Password</Text>
               <TextInput
-                style={styles.modalInput}
-                value={oldPassword}
-                onChangeText={setOldPassword}
-                placeholder="Current Password"
-                placeholderTextColor="#999"
-                secureTextEntry
-              />
-              
-              <TextInput
-                style={styles.modalInput}
+                style={[styles.modalInput, errors.newPassword && styles.inputError]}
                 value={newPassword}
                 onChangeText={setNewPassword}
-                placeholder="New Password"
+                placeholder="Enter new password"
                 placeholderTextColor="#999"
-                secureTextEntry
+                secureTextEntry = {secureNewText}
               />
-              
+
+               <TouchableOpacity 
+                  style={styles.eyeIcon}
+                  onPress={() => setSecureNewText(!secureNewText)}
+                >
+                  <Ionicons 
+                    name={secureNewText ? "eye-off" : "eye"} 
+                    size={wp('5%')} 
+                    color="#999" 
+                  />
+                </TouchableOpacity>
+
+              </View>
+             
+              {errors.newPassword && <Text style={styles.errorText}>{errors.newPassword}</Text>}
+
+              <View>
+
+              <Text style={styles.inputLabel}>Confirm New Password</Text>
               <TextInput
-                style={styles.modalInput}
+                style={[styles.modalInput, errors.confirmPassword && styles.inputError]}
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
-                placeholder="Confirm New Password"
+                placeholder="Confirm new password"
                 placeholderTextColor="#999"
-                secureTextEntry
+                secureTextEntry ={secureConfirmText}
               />
-              
-              <TouchableOpacity 
-                style={[styles.modalButton, (!oldPassword || !newPassword || !confirmPassword) && styles.modalButtonDisabled]} 
+               <TouchableOpacity 
+                  style={styles.eyeIcon}
+                  onPress={() => setSecureConfirmText(!secureConfirmText)}
+                >
+                  <Ionicons 
+                    name={secureConfirmText ? "eye-off" : "eye"} 
+                    size={wp('5%')} 
+                    color="#999" 
+                  />
+                </TouchableOpacity>
+                </View>
+              {errors.confirmPassword && <Text style={styles.errorText}>{errors.confirmPassword}</Text>}
+
+              <TouchableOpacity
+                style={[styles.modalButton, (!oldPassword || !newPassword || !confirmPassword) && styles.modalButtonDisabled]}
                 onPress={changePassword}
                 disabled={!oldPassword || !newPassword || !confirmPassword}
               >
@@ -425,9 +505,9 @@ export default function ProfileScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: "#f8f9fa" 
+  container: {
+    flex: 1,
+    backgroundColor: "#f8f9fa"
   },
   headerGradient: {
     paddingTop: Platform.OS === 'ios' ? hp('6%') : hp('4%'),
@@ -547,9 +627,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: wp('4%'),
   },
-  menuText: { 
-    flex: 1, 
-    fontSize: hp('2%'), 
+  menuText: {
+    flex: 1,
+    fontSize: hp('2%'),
     color: "#2d3436",
     fontWeight: '500',
   },
@@ -563,7 +643,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: wp('6%'),
     borderTopRightRadius: wp('6%'),
     padding: wp('6%'),
-    minHeight: hp('40%'),
+    minHeight: hp('50%'),
   },
   modalHeader: {
     flexDirection: 'row',
@@ -576,15 +656,34 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#2d3436",
   },
+  inputLabel: {
+    fontSize: hp('1.8%'),
+    fontWeight: '600',
+    color: '#2d3436',
+    marginBottom: hp('1%'),
+  },
   modalInput: {
     borderWidth: 1,
     borderColor: "#e0e0e0",
     borderRadius: wp('3%'),
     padding: hp('1.8%'),
-    marginBottom: hp('1.8%'),
+    marginBottom: hp('0.8%'),
     color: "#2d3436",
     fontSize: hp('2%'),
     backgroundColor: '#f8f9fa',
+  width:wp('88%')
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  inputError: {
+    borderColor: '#fc5c65',
+  },
+  errorText: {
+    color: '#fc5c65',
+    fontSize: hp('1.6%'),
+    marginBottom: hp('1.5%'),
   },
   modalButton: {
     backgroundColor: "#667eea",
@@ -600,5 +699,10 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "bold",
     fontSize: hp('2%'),
+  },
+  eyeIcon: {
+    position: 'absolute',
+    right: wp('3%'),
+    bottom: hp('2.5%'),
   },
 });

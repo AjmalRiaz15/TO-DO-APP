@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { off, onValue, ref } from 'firebase/database';
+import { collection, getDocs, onSnapshot } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -17,7 +17,7 @@ import {
   heightPercentageToDP as hp,
   widthPercentageToDP as wp,
 } from 'react-native-responsive-screen';
-import { auth, database } from '../firebaseConfig';
+import { auth, db } from '../firebaseConfig';
 
 const ChatListScreen = ({ navigation }) => {
   const [currentUser, setCurrentUser] = useState(null);
@@ -39,71 +39,64 @@ const ChatListScreen = ({ navigation }) => {
 
     return () => {
       unsubscribeAuth();
-      const usersRef = ref(database, 'users');
-      off(usersRef);
     };
   }, []);
 
-  const loadAllUsers = (currentUserId) => {
+  const loadAllUsers = async (currentUserId) => {
     try {
       setLoading(true);
       setError(null);
       
-      const usersRef = ref(database, 'users');
+      // Get all users from Firestore
+      const usersRef = collection(db, 'users');
+      const querySnapshot = await getDocs(usersRef);
       
-      onValue(usersRef, (snapshot) => {
-        const usersData = snapshot.val();
-        console.log('Users data from Firebase Database:', usersData);
-        
-        if (usersData) {
-          // Convert object to array and filter out current user
-          const usersList = Object.keys(usersData)
-            .filter(uid => uid !== currentUserId)
-            .map(uid => {
-              const userData = usersData[uid];
-              
-              // Handle different data structures
-              let email, displayName;
-              
-              if (typeof userData === 'string') {
-                email = userData;
-                displayName = userData.split('@')[0];
-              } else if (typeof userData === 'object' && userData !== null) {
-                email = userData.email || userData.displayName || uid;
-                displayName = userData.displayName || userData.email?.split('@')[0] || 'User';
-              } else {
-                email = 'unknown@email.com';
-                displayName = 'Unknown User';
-              }
-              
-              return {
-                uid: uid,
-                email: email,
-                displayName: displayName
-              };
-            });
-          
-          console.log('Processed users list from database:', usersList);
-          setUsers(usersList);
-        } else {
-          console.log('No users found in database');
-          setUsers([]);
+      const usersList = [];
+      querySnapshot.forEach((doc) => {
+        const userData = doc.data();
+        // Filter out current user
+        if (userData.uid !== currentUserId) {
+          usersList.push({
+            uid: userData.uid,
+            email: userData.email,
+            displayName: userData.displayName || userData.name || userData.email.split('@')[0],
+            // Include any other fields you need
+          });
         }
-        setLoading(false);
-        setRefreshing(false);
-      }, (error) => {
-        console.error('Database error:', error);
-        setError('Error loading users: ' + error.message);
-        setLoading(false);
-        setRefreshing(false);
       });
       
+      console.log('Users from Firestore:', usersList);
+      setUsers(usersList);
+      setLoading(false);
+      setRefreshing(false);
     } catch (error) {
-      console.error('Error loading users from database:', error);
+      console.error('Error loading users from Firestore:', error);
       setError(error.message);
       setLoading(false);
       setRefreshing(false);
     }
+  };
+
+  // For real-time updates (optional)
+  const setupRealTimeUsersListener = (currentUserId) => {
+    const usersRef = collection(db, 'users');
+    
+    return onSnapshot(usersRef, (querySnapshot) => {
+      const usersList = [];
+      querySnapshot.forEach((doc) => {
+        const userData = doc.data();
+        if (userData.uid !== currentUserId) {
+          usersList.push({
+            uid: userData.uid,
+            email: userData.email,
+            displayName: userData.displayName || userData.name || userData.email.split('@')[0],
+          });
+        }
+      });
+      setUsers(usersList);
+    }, (error) => {
+      console.error('Real-time users listener error:', error);
+    });
   };
 
   const onRefresh = () => {
@@ -135,6 +128,7 @@ const ChatListScreen = ({ navigation }) => {
   };
 
   const renderUserItem = ({ item }) => {
+    // Ensure consistent chat ID format
     const chatId = [currentUser.uid, item.uid].sort().join('_');
     
     return (
@@ -207,9 +201,6 @@ const ChatListScreen = ({ navigation }) => {
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <Text style={styles.headerTitle}>Messages</Text>
-          <TouchableOpacity onPress={handleSignOut}>
-            <Ionicons name="log-out-outline" size={wp('5%')} color="#ff6b6b" />
-          </TouchableOpacity>
         </View>
         <Text style={styles.headerSubtitle}>
           Connected as: {currentUser?.email}
