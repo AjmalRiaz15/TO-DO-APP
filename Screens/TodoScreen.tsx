@@ -155,7 +155,6 @@ export default function TodoScreen() {
           updatedAt: new Date(),
         });
       }
-      
       // Reload todos after saving
       loadTodos(user.uid);
     } catch (error) {
@@ -257,7 +256,7 @@ export default function TodoScreen() {
     }
     
     // Navigate to Chat screen with user info
-    navigation.navigate("Chat", { 
+    navigation.navigate("ChatList", { 
       userId: user.uid,
       userName: user.displayName || user.email,
       // Add these parameters to match what your ChatScreen expects

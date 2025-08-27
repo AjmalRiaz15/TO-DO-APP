@@ -1,7 +1,7 @@
+// Screens/LoginScreen.js
 import { Ionicons } from '@expo/vector-icons';
 import { yupResolver } from '@hookform/resolvers/yup';
 import { LinearGradient } from 'expo-linear-gradient';
-import { signInWithEmailAndPassword } from 'firebase/auth';
 import React, { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
@@ -17,9 +17,9 @@ import {
   TouchableWithoutFeedback,
   View
 } from 'react-native';
-import { heightPercentageToDP as hp, widthPercentageToDP as wp } from "react-native-responsive-screen"; // ✅ added
+import { heightPercentageToDP as hp, widthPercentageToDP as wp } from "react-native-responsive-screen";
 import * as Yup from 'yup';
-import { auth } from "../firebaseConfig";
+import AuthService from '../Services/AuthService';
 
 const loginSchema = Yup.object().shape({
   email: Yup.string().email('Invalid email').required('Email is required'),
@@ -43,18 +43,23 @@ export default function LoginScreen({ navigation }) {
     }).start();
   }, []);
 
-  const login = async (data) => {
-    setIsLoading(true);
-    try {
-      await signInWithEmailAndPassword(auth, data.email, data.password);
+const login = async (data) => {
+  setIsLoading(true);
+  try {
+    const result = await AuthService.signIn(data.email, data.password);
+    
+    if (result.success) {
       Alert.alert("Welcome Back", "Login successful!");
-      navigation.replace('Todo');
-    } catch (error) {
-      Alert.alert("Login Error", error.message);
-    } finally {
-      setIsLoading(false);
+      navigation.replace('ChatList')
+    } else {
+      Alert.alert("Login Error", result.error);
     }
-  };
+  } catch (error) {
+    Alert.alert("Login Error", error.message);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const translateY = animation.interpolate({
     inputRange: [0, 1],
@@ -78,8 +83,7 @@ export default function LoginScreen({ navigation }) {
         >
           <View style={styles.logoContainer}>
             <Animated.View style={[styles.logoCircle, { opacity }]}>
-              <Ionicons name="checkmark-circle" size={wp("20%")} color="#fff" /> 
-              {/* ✅ responsive icon */}
+              <Ionicons name="checkmark-circle" size={wp("20%")} color="#fff" />
             </Animated.View>
             <Animated.Text style={[styles.appTitle, { opacity }]}>
               TaskFlow

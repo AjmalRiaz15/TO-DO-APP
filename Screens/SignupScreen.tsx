@@ -1,11 +1,9 @@
+// Screens/SignupScreen.js
 import { Ionicons } from '@expo/vector-icons';
 import { yupResolver } from '@hookform/resolvers/yup';
 import { LinearGradient } from 'expo-linear-gradient';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import React, { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { heightPercentageToDP as hp, widthPercentageToDP as wp } from "react-native-responsive-screen";
-
 import {
   Alert,
   Animated,
@@ -20,8 +18,9 @@ import {
   TouchableWithoutFeedback,
   View
 } from 'react-native';
+import { heightPercentageToDP as hp, widthPercentageToDP as wp } from "react-native-responsive-screen";
 import * as Yup from 'yup';
-import { auth } from '../firebaseConfig';
+import AuthService from '../Services/AuthService';
 
 const signupSchema = Yup.object().shape({
   name: Yup.string().required('Name is required').min(2, 'Name must be at least 2 characters'),
@@ -56,18 +55,20 @@ export default function SignupScreen({ navigation }) {
   const signup = async (data) => {
     setIsLoading(true);
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
-      await updateProfile(userCredential.user, {
-        displayName: data.name
+      const result = await AuthService.signUp(data.email, data.password, {
+        name: data.name,
+        createdAt: Date.now(),
+        lastLogin: Date.now()
       });
-      Alert.alert("Success", "Account created successfully!");
-      navigation.replace('Login');
-    } catch (error) {
-      let errorMessage = error.message;
-      if (error.code === 'auth/email-already-in-use') {
-        errorMessage = 'This email is already registered. Please login instead.';
+      
+      if (result.success) {
+        Alert.alert("Success", "Account created successfully!");
+        navigation.replace('Login');
+      } else {
+        Alert.alert("Signup Error", result.error);
       }
-      Alert.alert("Signup Error", errorMessage);
+    } catch (error) {
+      Alert.alert("Signup Error", error.message);
     } finally {
       setIsLoading(false);
     }
@@ -96,7 +97,7 @@ export default function SignupScreen({ navigation }) {
           <ScrollView contentContainerStyle={styles.scrollContainer}>
             <View style={styles.logoContainer}>
               <Animated.View style={[styles.logoCircle, { opacity }]}>
-                <Ionicons name="person-add" size={60} color="#fff" />
+                <Ionicons name="person-add" size={wp("15%")} color="#fff" />
               </Animated.View>
               <Animated.Text style={[styles.appTitle, { opacity }]}>
                 Join TaskFlow
@@ -119,7 +120,7 @@ export default function SignupScreen({ navigation }) {
 
               {/* Name */}
               <View style={styles.inputContainer}>
-                <Ionicons name="person-outline" size={20} color="#999" style={styles.inputIcon} />
+                <Ionicons name="person-outline" size={wp("5%")} color="#999" style={styles.inputIcon} />
                 <Controller
                   control={control}
                   name="name"
@@ -137,14 +138,14 @@ export default function SignupScreen({ navigation }) {
               </View>
               {errors.name && (
                 <View style={styles.errorContainer}>
-                  <Ionicons name="alert-circle" size={14} color="#ff6b6b" />
+                  <Ionicons name="alert-circle" size={wp("3.5%")} color="#ff6b6b" />
                   <Text style={styles.error}>{errors.name.message}</Text>
                 </View>
               )}
 
               {/* Email */}
               <View style={styles.inputContainer}>
-                <Ionicons name="mail-outline" size={20} color="#999" style={styles.inputIcon} />
+                <Ionicons name="mail-outline" size={wp("5%")} color="#999" style={styles.inputIcon} />
                 <Controller
                   control={control}
                   name="email"
@@ -164,14 +165,14 @@ export default function SignupScreen({ navigation }) {
               </View>
               {errors.email && (
                 <View style={styles.errorContainer}>
-                  <Ionicons name="alert-circle" size={14} color="#ff6b6b" />
+                  <Ionicons name="alert-circle" size={wp("3.5%")} color="#ff6b6b" />
                   <Text style={styles.error}>{errors.email.message}</Text>
                 </View>
               )}
 
               {/* Password */}
               <View style={styles.inputContainer}>
-                <Ionicons name="lock-closed-outline" size={20} color="#999" style={styles.inputIcon} />
+                <Ionicons name="lock-closed-outline" size={wp("5%")} color="#999" style={styles.inputIcon} />
                 <Controller
                   control={control}
                   name="password"
@@ -193,21 +194,21 @@ export default function SignupScreen({ navigation }) {
                 >
                   <Ionicons
                     name={showPassword ? "eye-off-outline" : "eye-outline"}
-                    size={20}
+                    size={wp("5%")}
                     color="#999"
                   />
                 </TouchableOpacity>
               </View>
               {errors.password && (
                 <View style={styles.errorContainer}>
-                  <Ionicons name="alert-circle" size={14} color="#ff6b6b" />
+                  <Ionicons name="alert-circle" size={wp("3.5%")} color="#ff6b6b" />
                   <Text style={styles.error}>{errors.password.message}</Text>
                 </View>
               )}
 
               {/* Confirm Password */}
               <View style={styles.inputContainer}>
-                <Ionicons name="lock-closed-outline" size={20} color="#999" style={styles.inputIcon} />
+                <Ionicons name="lock-closed-outline" size={wp("5%")} color="#999" style={styles.inputIcon} />
                 <Controller
                   control={control}
                   name="confirmPassword"
@@ -229,18 +230,17 @@ export default function SignupScreen({ navigation }) {
                 >
                   <Ionicons
                     name={showConfirmPassword ? "eye-off-outline" : "eye-outline"}
-                    size={20}
+                    size={wp("5%")}
                     color="#999"
                   />
                 </TouchableOpacity>
               </View>
               {errors.confirmPassword && (
                 <View style={styles.errorContainer}>
-                  <Ionicons name="alert-circle" size={14} color="#ff6b6b" />
+                  <Ionicons name="alert-circle" size={wp("3.5%")} color="#ff6b6b" />
                   <Text style={styles.error}>{errors.confirmPassword.message}</Text>
                 </View>
               )}
-
 
               {/* Sign Up Button */}
               <TouchableOpacity
@@ -255,7 +255,7 @@ export default function SignupScreen({ navigation }) {
                   end={{ x: 1, y: 0 }}
                 >
                   {isLoading ? (
-                    <Ionicons name="refresh" size={24} color="#fff" style={styles.loadingIcon} />
+                    <Ionicons name="refresh" size={wp("6%")} color="#fff" style={styles.loadingIcon} />
                   ) : (
                     <Text style={styles.buttonText}>Create Account</Text>
                   )}
@@ -371,28 +371,6 @@ const styles = StyleSheet.create({
     color: '#ff6b6b',
     marginLeft: wp("2%"),
     fontSize: wp("3.2%"),
-  },
-  requirementsContainer: {
-    backgroundColor: '#f1f2f6',
-    borderRadius: wp("3%"),
-    padding: wp("4%"),
-    marginBottom: hp("2.5%"),
-  },
-  requirementsTitle: {
-    fontSize: wp("3.8%"),
-    fontWeight: '600',
-    color: '#2f3542',
-    marginBottom: hp("1%"),
-  },
-  requirementItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: hp("0.5%"),
-  },
-  requirementText: {
-    fontSize: wp("3.2%"),
-    color: '#57606f',
-    marginLeft: wp("1.5%"),
   },
   button: {
     borderRadius: wp("3%"),
