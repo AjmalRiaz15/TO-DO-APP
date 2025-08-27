@@ -135,12 +135,14 @@ const ChatListScreen = ({ navigation }) => {
   };
 
   const renderUserItem = ({ item }) => {
+    const chatId = [currentUser.uid, item.uid].sort().join('_');
+    
     return (
       <TouchableOpacity
         style={styles.userItem}
         onPress={() => navigation.navigate('Chat', { 
           recipient: item,
-          chatId: [currentUser.uid, item.uid].sort().join('_')
+          chatId: chatId
         })}
       >
         <View style={styles.avatarContainer}>
@@ -205,6 +207,9 @@ const ChatListScreen = ({ navigation }) => {
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <Text style={styles.headerTitle}>Messages</Text>
+          <TouchableOpacity onPress={handleSignOut}>
+            <Ionicons name="log-out-outline" size={wp('5%')} color="#ff6b6b" />
+          </TouchableOpacity>
         </View>
         <Text style={styles.headerSubtitle}>
           Connected as: {currentUser?.email}

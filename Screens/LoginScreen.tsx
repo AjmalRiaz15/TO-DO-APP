@@ -50,7 +50,7 @@ const login = async (data) => {
     
     if (result.success) {
       Alert.alert("Welcome Back", "Login successful!");
-      navigation.replace('ChatList')
+      navigation.replace('Todo')
     } else {
       Alert.alert("Login Error", result.error);
     }

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { onAuthStateChanged } from 'firebase/auth';
-import { off, onValue, orderByChild, push, query, ref, set } from 'firebase/database';
+import { get, off, onValue, orderByChild, push, query, ref, set } from 'firebase/database';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -29,13 +29,16 @@ const ChatScreen = ({ route, navigation }) => {
   const [messages, setMessages] = useState([]);
   const [messageText, setMessageText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [chatInitialized, setChatInitialized] = useState(false);
   const flatListRef = useRef(null);
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (user) {
         setCurrentUser(user);
-        loadMessages(chatId);
+        initializeChat(user).then(() => {
+          loadMessages(chatId);
+        });
       } else {
         setLoading(false);
       }
@@ -48,6 +51,37 @@ const ChatScreen = ({ route, navigation }) => {
       off(messagesRef);
     };
   }, [chatId]);
+
+  const initializeChat = async (user) => {
+    try {
+      // First, ensure the chat exists with proper participants
+      const chatRef = ref(database, `chats/${chatId}`);
+      
+      // Check if chat exists
+      const chatSnapshot = await get(chatRef);
+      
+      if (!chatSnapshot.exists()) {
+        console.log('Creating new chat:', chatId);
+        // Create the chat structure if it doesn't exist
+        await set(chatRef, {
+          participants: {
+            [user.uid]: true,
+            [recipient.uid]: true
+          },
+          lastMessage: '',
+          lastMessageTime: Date.now(),
+        });
+        console.log('Chat created successfully');
+      } else {
+        console.log('Chat already exists');
+      }
+      
+      setChatInitialized(true);
+    } catch (error) {
+      console.error('Error initializing chat:', error);
+      Alert.alert('Error', 'Failed to initialize chat. Please try again.');
+    }
+  };
 
   const loadMessages = (chatId) => {
     setLoading(true);
@@ -79,7 +113,21 @@ const ChatScreen = ({ route, navigation }) => {
       setLoading(false);
     }, (error) => {
       console.error('Error loading messages:', error);
-      Alert.alert('Error', 'Failed to load messages');
+      
+      if (error.code === 'PERMISSION_DENIED') {
+        Alert.alert(
+          'Permission Error', 
+          'Cannot access this chat. Please check your security rules.',
+          [
+            {
+              text: 'OK',
+              onPress: () => navigation.goBack()
+            }
+          ]
+        );
+      } else {
+        Alert.alert('Error', 'Failed to load messages: ' + error.message);
+      }
       setLoading(false);
     });
   };
@@ -88,6 +136,20 @@ const ChatScreen = ({ route, navigation }) => {
     if (!messageText.trim() || !currentUser) return;
     
     try {
+      // First, ensure the chat exists with proper participants
+      const chatRef = ref(database, `chats/${chatId}`);
+      
+      // Set up the chat structure if it doesn't exist
+      await set(chatRef, {
+        participants: {
+          [currentUser.uid]: true,
+          [recipient.uid]: true
+        },
+        lastMessage: messageText.trim(),
+        lastMessageTime: Date.now(),
+      }, { merge: true });
+      
+      // Now send the message
       const messagesRef = ref(database, `chats/${chatId}/messages`);
       const newMessageRef = push(messagesRef);
       
@@ -100,48 +162,45 @@ const ChatScreen = ({ route, navigation }) => {
       
       await set(newMessageRef, messageData);
       
-      // Update last message in chat
-      const chatRef = ref(database, `chats/${chatId}`);
-      await set(chatRef, {
-        lastMessage: messageText.trim(),
-        lastMessageTime: Date.now(),
-        participants: {
-          [currentUser.uid]: true,
-          [recipient.uid]: true
-        }
-      }, { merge: true });
-      
       setMessageText('');
     } catch (error) {
       console.error('Error sending message:', error);
-      Alert.alert('Error', 'Failed to send message');
+      
+      if (error.code === 'PERMISSION_DENIED') {
+        Alert.alert(
+          'Permission Error', 
+          'Cannot send message. Please check your security rules.'
+        );
+      } else {
+        Alert.alert('Error', 'Failed to send message: ' + error.message);
+      }
     }
   };
 
   const renderMessage = ({ item }) => {
     const isCurrentUser = item.senderId === currentUser?.uid;
-    
+
     return (
       <View style={[
-        styles.messageContainer, 
+        styles.messageContainer,
         isCurrentUser ? styles.currentUserMessage : styles.otherUserMessage
       ]}>
         {!isCurrentUser && (
           recipient.photoURL ? (
-            <Image 
-              source={{ uri: recipient.photoURL }} 
+            <Image
+              source={{ uri: recipient.photoURL }}
               style={styles.avatarSmall}
             />
           ) : (
             <View style={[styles.avatarSmall, styles.avatarPlaceholderSmall]}>
               <Text style={styles.avatarSmallText}>
-                {recipient.displayName ? recipient.displayName.charAt(0).toUpperCase() : 
-                 recipient.email ? recipient.email.charAt(0).toUpperCase() : 'U'}
+                {recipient.displayName ? recipient.displayName.charAt(0).toUpperCase() :
+                  recipient.email ? recipient.email.charAt(0).toUpperCase() : 'U'}
               </Text>
             </View>
           )
         )}
-        
+
         <View style={[
           styles.messageBubble,
           isCurrentUser ? styles.currentUserBubble : styles.otherUserBubble
@@ -153,24 +212,24 @@ const ChatScreen = ({ route, navigation }) => {
             styles.timestamp,
             isCurrentUser ? styles.currentUserTimestamp : styles.otherUserTimestamp
           ]}>
-            {new Date(item.timestamp).toLocaleTimeString([], { 
-              hour: '2-digit', 
-              minute: '2-digit' 
+            {new Date(item.timestamp).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit'
             })}
           </Text>
         </View>
-        
+
         {isCurrentUser && (
           currentUser.photoURL ? (
-            <Image 
-              source={{ uri: currentUser.photoURL }} 
+            <Image
+              source={{ uri: currentUser.photoURL }}
               style={styles.avatarSmall}
             />
           ) : (
             <View style={[styles.avatarSmall, styles.avatarPlaceholderSmall, styles.currentUserAvatar]}>
               <Text style={styles.avatarSmallText}>
-                {currentUser.displayName ? currentUser.displayName.charAt(0).toUpperCase() : 
-                 currentUser.email ? currentUser.email.charAt(0).toUpperCase() : 'U'}
+                {currentUser.displayName ? currentUser.displayName.charAt(0).toUpperCase() :
+                  currentUser.email ? currentUser.email.charAt(0).toUpperCase() : 'U'}
               </Text>
             </View>
           )
@@ -200,13 +259,13 @@ const ChatScreen = ({ route, navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
           <Ionicons name="arrow-back" size={wp('5%')} color="#4a69bd" />
         </TouchableOpacity>
-        
+
         <View style={styles.headerInfo}>
           <Text style={styles.headerTitle} numberOfLines={1}>
             {recipient.displayName || recipient.email || 'Unknown User'}
@@ -215,24 +274,24 @@ const ChatScreen = ({ route, navigation }) => {
             {isTyping ? 'Typing...' : recipient.email}
           </Text>
         </View>
-        
+
         <View style={styles.headerRight}>
           {recipient.photoURL ? (
-            <Image 
-              source={{ uri: recipient.photoURL }} 
+            <Image
+              source={{ uri: recipient.photoURL }}
               style={styles.headerAvatar}
             />
           ) : (
             <View style={[styles.headerAvatar, styles.headerAvatarPlaceholder]}>
               <Text style={styles.headerAvatarText}>
-                {recipient.displayName ? recipient.displayName.charAt(0).toUpperCase() : 
-                 recipient.email ? recipient.email.charAt(0).toUpperCase() : 'U'}
+                {recipient.displayName ? recipient.displayName.charAt(0).toUpperCase() :
+                  recipient.email ? recipient.email.charAt(0).toUpperCase() : 'U'}
               </Text>
             </View>
           )}
         </View>
       </View>
-      
+
       <FlatList
         ref={flatListRef}
         data={messages}
@@ -255,8 +314,8 @@ const ChatScreen = ({ route, navigation }) => {
           </View>
         }
       />
-      
-      <KeyboardAvoidingView 
+
+      <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? hp('6%') : 0}
         style={styles.inputContainer}
@@ -270,7 +329,7 @@ const ChatScreen = ({ route, navigation }) => {
           multiline
           maxLength={500}
         />
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[styles.sendButton, !messageText.trim() && styles.disabledButton]}
           onPress={handleSendMessage}
           disabled={!messageText.trim()}
@@ -286,7 +345,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8f9fa',
-    marginTop:hp('4%')
+    marginTop: hp('4%')
   },
   centerContainer: {
     flex: 1,
