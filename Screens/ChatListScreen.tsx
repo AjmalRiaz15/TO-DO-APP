@@ -12,11 +12,14 @@ import {
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   FlatList,
+  Image,
   RefreshControl,
   SafeAreaView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
@@ -34,13 +37,32 @@ const ChatListScreen = ({ navigation }) => {
   const [error, setError] = useState(null);
   const [unreadCounts, setUnreadCounts] = useState({});
   const [lastMessages, setLastMessages] = useState({});
-  const [chatDataMap, setChatDataMap] = useState({}); // To store chat data by participant ID
+  const [chatDataMap, setChatDataMap] = useState({});
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Animation values
+  const fadeAnim = useState(new Animated.Value(0))[0];
+  const slideAnim = useState(new Animated.Value(30))[0];
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (user) {
         setCurrentUser(user);
         loadAllUsers(user.uid);
+        
+        // Start animations
+        Animated.parallel([
+          Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(slideAnim, {
+            toValue: 0,
+            duration: 500,
+            useNativeDriver: true,
+          })
+        ]).start();
       } else {
         setLoading(false);
         setError('Not authenticated');
@@ -137,6 +159,7 @@ const ChatListScreen = ({ navigation }) => {
             uid: userData.uid,
             email: userData.email,
             displayName: userData.displayName || userData.name || userData.email.split('@')[0],
+            photoURL: userData.photoURL || null,
           });
         }
       });
@@ -167,9 +190,15 @@ const ChatListScreen = ({ navigation }) => {
     }
   };
 
+  // Filter users based on search query
+  const filteredUsers = users.filter(user => 
+    user.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    user.email.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   // Sort users by last message time and unread status
   const getSortedUsers = () => {
-    return [...users].sort((a, b) => {
+    return [...filteredUsers].sort((a, b) => {
       // First, prioritize users with unread messages
       const aUnread = unreadCounts[a.uid] || 0;
       const bUnread = unreadCounts[b.uid] || 0;
@@ -210,78 +239,98 @@ const ChatListScreen = ({ navigation }) => {
     }
   };
 
-  const renderUserItem = ({ item }) => {
+  const renderUserItem = ({ item, index }) => {
     const unreadCount = unreadCounts[item.uid] || 0;
     const lastMessage = lastMessages[item.uid];
     
     return (
-      <TouchableOpacity
+      <Animated.View
         style={[
-          styles.userItem,
-          unreadCount > 0 && styles.unreadUserItem
-        ]}
-        onPress={async () => {
-          // Mark as read before navigating
-          if (unreadCount > 0) {
-            await markAsRead(item.uid);
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }]
           }
-          navigation.navigate('Chat', { 
-            recipient: item,
-            chatId: chatDataMap[item.uid]?.chatId || [currentUser.uid, item.uid].sort().join('_')
-          });
-        }}
+        ]}
       >
-        <View style={styles.avatarContainer}>
-          <View style={[styles.avatar, styles.avatarPlaceholder]}>
-            <Text style={styles.avatarText}>
-              {item.displayName ? item.displayName.charAt(0).toUpperCase() : 'U'}
-            </Text>
+        <TouchableOpacity
+          style={[
+            styles.userItem,
+            unreadCount > 0 && styles.unreadUserItem
+          ]}
+          onPress={async () => {
+            // Mark as read before navigating
+            if (unreadCount > 0) {
+              await markAsRead(item.uid);
+            }
+            navigation.navigate('Chat', { 
+              recipient: item,
+              chatId: chatDataMap[item.uid]?.chatId || [currentUser.uid, item.uid].sort().join('_')
+            });
+          }}
+          activeOpacity={0.7}
+        >
+          <View style={styles.avatarContainer}>
+            {item.photoURL ? (
+              <Image
+                source={{ uri: item.photoURL }}
+                style={styles.avatarImage}
+              />
+            ) : (
+              <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                <Text style={styles.avatarText}>
+                  {item.displayName ? item.displayName.charAt(0).toUpperCase() : 'U'}
+                </Text>
+              </View>
+            )}
+            {unreadCount > 0 && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadText}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Text>
+              </View>
+            )}
+            
+            {/* Online status indicator */}
+            <View style={styles.onlineIndicator} />
           </View>
-          {unreadCount > 0 && (
-            <View style={styles.unreadBadge}>
-              <Text style={styles.unreadText}>
-                {unreadCount > 99 ? '99+' : unreadCount}
-              </Text>
-            </View>
-          )}
-        </View>
 
-        <View style={styles.userInfo}>
-          <Text 
-            style={[
-              styles.userName, 
-              unreadCount > 0 && styles.unreadUserName
-            ]} 
-            numberOfLines={1}
-          >
-            {item.displayName || 'Unknown User'}
-          </Text>
-          {lastMessage ? (
+          <View style={styles.userInfo}>
             <Text 
               style={[
-                styles.lastMessage,
-                unreadCount > 0 && styles.unreadLastMessage
+                styles.userName, 
+                unreadCount > 0 && styles.unreadUserName
               ]} 
               numberOfLines={1}
             >
-              {lastMessage.text}
+              {item.displayName || 'Unknown User'}
             </Text>
-          ) : (
-            <Text style={styles.userEmail} numberOfLines={1}>
-              {item.email}
-            </Text>
-          )}
-        </View>
+            {lastMessage ? (
+              <Text 
+                style={[
+                  styles.lastMessage,
+                  unreadCount > 0 && styles.unreadLastMessage
+                ]} 
+                numberOfLines={1}
+              >
+                {lastMessage.text}
+              </Text>
+            ) : (
+              <Text style={styles.userEmail} numberOfLines={1}>
+                {item.email}
+              </Text>
+            )}
+          </View>
 
-        <View style={styles.rightContainer}>
-          {lastMessage && (
-            <Text style={styles.timestamp}>
-              {formatTime(lastMessage.createdAt)}
-            </Text>
-          )}
-          <Ionicons name="chevron-forward" size={wp('5%')} color="#747d8c" />
-        </View>
-      </TouchableOpacity>
+          <View style={styles.rightContainer}>
+            {lastMessage && (
+              <Text style={styles.timestamp}>
+                {formatTime(lastMessage.createdAt)}
+              </Text>
+            )}
+            <Ionicons name="chevron-forward" size={wp('4.5%')} color="#cbd5e0" />
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
     );
   };
 
@@ -305,8 +354,8 @@ const ChatListScreen = ({ navigation }) => {
   if (loading) {
     return (
       <SafeAreaView style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#4a69bd" />
-        <Text style={styles.loadingText}>Loading users...</Text>
+        <ActivityIndicator size="large" color="#6c5ce7" />
+        <Text style={styles.loadingText}>Loading conversations...</Text>
       </SafeAreaView>
     );
   }
@@ -314,15 +363,15 @@ const ChatListScreen = ({ navigation }) => {
   if (error) {
     return (
       <SafeAreaView style={styles.centerContainer}>
-        <Ionicons name="alert-circle-outline" size={wp('15%')} color="#ff6b6b" />
-        <Text style={styles.errorText}>Error Loading Users</Text>
+        <Ionicons name="alert-circle-outline" size={wp('20%')} color="#e74c3c" />
+        <Text style={styles.errorText}>Error Loading Conversations</Text>
         <Text style={styles.errorSubtext}>{error}</Text>
         <TouchableOpacity 
           style={styles.retryButton}
           onPress={() => currentUser && loadAllUsers(currentUser.uid)}
         >
           <Ionicons name="refresh" size={wp('4%')} color="#fff" />
-          <Text style={styles.retryText}>Retry</Text>
+          <Text style={styles.retryText}>Try Again</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -331,8 +380,8 @@ const ChatListScreen = ({ navigation }) => {
   if (!currentUser) {
     return (
       <SafeAreaView style={styles.centerContainer}>
-        <Ionicons name="chatbubble-ellipses-outline" size={wp('15%')} color="#ccc" />
-        <Text style={styles.errorText}>You need to be logged in to view users</Text>
+        <Ionicons name="chatbubble-ellipses-outline" size={wp('20%')} color="#ddd" />
+        <Text style={styles.errorText}>You need to be logged in to view conversations</Text>
       </SafeAreaView>
     );
   }
@@ -341,33 +390,74 @@ const ChatListScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+      <Animated.View 
+        style={[
+          styles.header,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }]
+          }
+        ]}
+      >
         <View style={styles.headerTop}>
           <Text style={styles.headerTitle}>Messages</Text>
+          <TouchableOpacity style={styles.newChatButton}>
+            <Ionicons name="create-outline" size={wp('5.5%')} color="#6c5ce7" />
+          </TouchableOpacity>
         </View>
-        <Text style={styles.headerSubtitle}>
-          Connected as: {currentUser?.email}
-        </Text>
-        <Text style={styles.userCount}>
-          {users.length} user(s) available
-        </Text>
-      </View>
+        
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={wp('5%')} color="#a0aec0" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search conversations..."
+            placeholderTextColor="#a0aec0"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={wp('5%')} color="#a0aec0" />
+            </TouchableOpacity>
+          )}
+        </View>
+        
+        <View style={styles.headerStats}>
+          <Text style={styles.userCount}>
+            {sortedUsers.length} conversation{sortedUsers.length !== 1 ? 's' : ''}
+          </Text>
+          {Object.values(unreadCounts).some(count => count > 0) && (
+            <View style={styles.totalUnreadBadge}>
+              <Text style={styles.totalUnreadText}>
+                {Object.values(unreadCounts).reduce((sum, count) => sum + count, 0)} unread
+              </Text>
+            </View>
+          )}
+        </View>
+      </Animated.View>
 
       {sortedUsers.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Ionicons name="people-outline" size={wp('15%')} color="#ccc" />
-          <Text style={styles.emptyText}>No other users found</Text>
+          <Ionicons name="chatbubbles-outline" size={wp('25%')} color="#e2e8f0" />
+          <Text style={styles.emptyText}>
+            {searchQuery ? 'No matches found' : 'No conversations yet'}
+          </Text>
           <Text style={styles.emptySubtext}>
-            Other users will appear here once they register in the app.
+            {searchQuery ? 
+              'Try a different search term' : 
+              'Start a conversation by messaging another user'
+            }
           </Text>
           
-          <TouchableOpacity 
-            style={styles.refreshButton}
-            onPress={() => currentUser && loadAllUsers(currentUser.uid)}
-          >
-            <Ionicons name="refresh" size={wp('3.5%')} color="#4a69bd" />
-            <Text style={styles.refreshText}>Refresh</Text>
-          </TouchableOpacity>
+          {!searchQuery && (
+            <TouchableOpacity 
+              style={styles.refreshButton}
+              onPress={() => currentUser && loadAllUsers(currentUser.uid)}
+            >
+              <Ionicons name="refresh" size={wp('4%')} color="#6c5ce7" />
+              <Text style={styles.refreshText}>Refresh</Text>
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         <FlatList
@@ -379,16 +469,11 @@ const ChatListScreen = ({ navigation }) => {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              colors={['#4a69bd']}
+              colors={['#6c5ce7']}
+              tintColor="#6c5ce7"
             />
           }
-          ListHeaderComponent={
-            <View style={styles.listHeader}>
-              <Text style={styles.listHeaderText}>
-                Available Users ({sortedUsers.length})
-              </Text>
-            </View>
-          }
+          showsVerticalScrollIndicator={false}
         />
       )}
     </SafeAreaView>
@@ -398,8 +483,7 @@ const ChatListScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-    top: hp('4%'),
+    backgroundColor: '#f8fafc',
   },
   centerContainer: {
     flex: 1,
@@ -411,197 +495,302 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: hp('2%'),
     fontSize: wp('4%'),
-    color: '#747d8c',
+    color: '#64748b',
+    fontFamily: 'Inter-Medium',
   },
   errorText: {
-    marginTop: hp('2%'),
+    marginTop: hp('3%'),
     fontSize: wp('4.5%'),
     fontWeight: '600',
-    color: '#2f3542',
+    color: '#2d3748',
     textAlign: 'center',
+    fontFamily: 'Inter-SemiBold',
   },
   errorSubtext: {
     marginTop: hp('1%'),
-    fontSize: wp('3.5%'),
-    color: '#747d8c',
+    fontSize: wp('3.8%'),
+    color: '#718096',
     textAlign: 'center',
-    marginBottom: hp('2%'),
+    marginBottom: hp('3%'),
+    fontFamily: 'Inter-Regular',
+    maxWidth: '80%',
   },
   header: {
-    padding: wp('4%'),
+    padding: wp('5%'),
+    paddingBottom: hp('2%'),
+    backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f2f6',
+    borderBottomColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: hp('1%'),
+    marginBottom: hp('2%'),
   },
   headerTitle: {
-    fontSize: wp('6%'),
+    fontSize: wp('6.5%'),
     fontWeight: 'bold',
-    color: '#2f3542',
+    color: '#1e293b',
+    fontFamily: 'Inter-Bold',
   },
-  headerSubtitle: {
-    fontSize: wp('3.5%'),
-    color: '#747d8c',
-    marginBottom: hp('0.5%'),
+  newChatButton: {
+    padding: wp('2%'),
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f1f5f9',
+    borderRadius: wp('3%'),
+    paddingHorizontal: wp('4%'),
+    paddingVertical: hp('1.2%'),
+    marginBottom: hp('1.5%'),
+  },
+  searchIcon: {
+    marginRight: wp('2%'),
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: wp('4%'),
+    color: '#334155',
+    fontFamily: 'Inter-Regular',
+    padding: 0,
+  },
+  headerStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   userCount: {
+    fontSize: wp('3.5%'),
+    color: '#64748b',
+    fontFamily: 'Inter-Medium',
+  },
+  totalUnreadBadge: {
+    backgroundColor: '#6c5ce7',
+    paddingHorizontal: wp('2.5%'),
+    paddingVertical: hp('0.5%'),
+    borderRadius: wp('2%'),
+  },
+  totalUnreadText: {
+    color: '#fff',
     fontSize: wp('3%'),
-    color: '#999',
-    fontStyle: 'italic',
+    fontWeight: '600',
+    fontFamily: 'Inter-SemiBold',
   },
   listContent: {
     padding: wp('4%'),
-  },
-  listHeader: {
-    marginBottom: hp('1.5%'),
-    paddingBottom: hp('1%'),
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f2f6',
-  },
-  listHeaderText: {
-    fontSize: wp('4%'),
-    fontWeight: '600',
-    color: '#2f3542',
+    paddingBottom: hp('2%'),
   },
   userItem: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: wp('4%'),
     marginBottom: hp('1.5%'),
-    backgroundColor: '#f8f9fa',
-    borderRadius: wp('3%'),
-    borderWidth: 1,
-    borderColor: '#e9ecef',
+    backgroundColor: '#fff',
+    borderRadius: wp('4%'),
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   unreadUserItem: {
-    backgroundColor: '#e6f7ff',
-    borderColor: '#91d5ff',
+    backgroundColor: '#f0f9ff',
+    borderLeftWidth: 3,
+    borderLeftColor: '#6c5ce7',
   },
   avatarContainer: {
-    marginRight: wp('3%'),
+    marginRight: wp('4%'),
     position: 'relative',
   },
   avatar: {
-    width: wp('12%'),
-    height: wp('12%'),
-    borderRadius: wp('6%'),
+    width: wp('14%'),
+    height: wp('14%'),
+    borderRadius: wp('7%'),
+  },
+  avatarImage: {
+    width: wp('14%'),
+    height: wp('14%'),
+    borderRadius: wp('7%'),
   },
   avatarPlaceholder: {
-    backgroundColor: '#4a69bd',
+    backgroundColor: '#6c5ce7',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
   },
   avatarText: {
     color: '#fff',
-    fontSize: wp('4.5%'),
+    fontSize: wp('5%'),
     fontWeight: '600',
+    fontFamily: 'Inter-SemiBold',
   },
   unreadBadge: {
     position: 'absolute',
     top: -5,
     right: -5,
-    backgroundColor: '#ff4d4f',
+    backgroundColor: '#ef4444',
     borderRadius: wp('3%'),
-    minWidth: wp('5%'),
-    height: wp('5%'),
+    minWidth: wp('5.5%'),
+    height: wp('5.5%'),
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: wp('1%'),
+    zIndex: 1,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
   },
   unreadText: {
     color: '#fff',
-    fontSize: wp('2.5%'),
+    fontSize: wp('2.8%'),
     fontWeight: 'bold',
+    fontFamily: 'Inter-Bold',
+  },
+  onlineIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: wp('3%'),
+    height: wp('3%'),
+    borderRadius: wp('1.5%'),
+    backgroundColor: '#22c55e',
+    borderWidth: 2,
+    borderColor: '#fff',
   },
   userInfo: {
     flex: 1,
     marginRight: wp('3%'),
   },
   userName: {
-    fontSize: wp('4%'),
+    fontSize: wp('4.2%'),
     fontWeight: '600',
-    color: '#2f3542',
+    color: '#1e293b',
     marginBottom: hp('0.5%'),
+    fontFamily: 'Inter-SemiBold',
   },
   unreadUserName: {
-    fontWeight: 'bold',
-    color: '#1890ff',
+    color: '#6c5ce7',
   },
   userEmail: {
     fontSize: wp('3.5%'),
-    color: '#747d8c',
+    color: '#64748b',
+    fontFamily: 'Inter-Regular',
   },
   lastMessage: {
-    fontSize: wp('3.5%'),
-    color: '#747d8c',
+    fontSize: wp('3.8%'),
+    color: '#64748b',
+    fontFamily: 'Inter-Regular',
   },
   unreadLastMessage: {
-    fontWeight: '600',
-    color: '#1890ff',
+    color: '#6c5ce7',
+    fontWeight: '500',
+    fontFamily: 'Inter-Medium',
   },
   rightContainer: {
     alignItems: 'flex-end',
   },
   timestamp: {
-    fontSize: wp('3%'),
-    color: '#999',
-    marginBottom: hp('0.5%'),
+    fontSize: wp('3.2%'),
+    color: '#94a3b8',
+    marginBottom: hp('1%'),
+    fontFamily: 'Inter-Regular',
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: wp('5%'),
+    padding: wp('10%'),
   },
   emptyText: {
-    marginTop: hp('2%'),
+    marginTop: hp('3%'),
     fontSize: wp('4.5%'),
     fontWeight: '600',
-    color: '#2f3542',
+    color: '#334155',
     textAlign: 'center',
+    fontFamily: 'Inter-SemiBold',
   },
   emptySubtext: {
     marginTop: hp('1%'),
-    fontSize: wp('3.5%'),
-    color: '#747d8c',
+    fontSize: wp('4%'),
+    color: '#64748b',
     textAlign: 'center',
-    marginBottom: hp('2%'),
-    lineHeight: hp('2.5%'),
+    marginBottom: hp('3%'),
+    fontFamily: 'Inter-Regular',
+    lineHeight: hp('2.8%'),
+    maxWidth: '80%',
   },
   refreshButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: '#4a69bd',
-    paddingHorizontal: wp('3%'),
-    paddingVertical: hp('1%'),
-    borderRadius: wp('1.5%'),
-    marginTop: hp('1%'),
+    borderColor: '#6c5ce7',
+    paddingHorizontal: wp('4%'),
+    paddingVertical: hp('1.2%'),
+    borderRadius: wp('2%'),
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   refreshText: {
-    color: '#4a69bd',
-    marginLeft: wp('1.5%'),
+    color: '#6c5ce7',
+    marginLeft: wp('2%'),
     fontWeight: '600',
-    fontSize: wp('3%'),
+    fontSize: wp('3.5%'),
+    fontFamily: 'Inter-SemiBold',
   },
   retryButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#4a69bd',
-    paddingHorizontal: wp('4%'),
-    paddingVertical: hp('1.5%'),
-    borderRadius: wp('2%'),
+    backgroundColor: '#6c5ce7',
+    paddingHorizontal: wp('5%'),
+    paddingVertical: hp('1.8%'),
+    borderRadius: wp('2.5%'),
+    shadowColor: '#6c5ce7',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   retryText: {
     color: '#fff',
     marginLeft: wp('2%'),
     fontWeight: '600',
-    fontSize: wp('3.5%'),
+    fontSize: wp('4%'),
+    fontFamily: 'Inter-SemiBold',
   },
 });
 

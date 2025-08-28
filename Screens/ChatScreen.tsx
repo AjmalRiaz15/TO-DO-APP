@@ -52,6 +52,10 @@ const ChatScreen = ({ route, navigation }) => {
   const drawerAnimation = useRef(new Animated.Value(0)).current;
   const drawerHeight = hp('30%');
 
+  // Animation values
+  const inputFocusAnimation = useRef(new Animated.Value(0)).current;
+  const sendButtonAnimation = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (user) {
@@ -102,9 +106,38 @@ const ChatScreen = ({ route, navigation }) => {
     }
   }, [showMediaDrawer]);
 
+  useEffect(() => {
+    // Animate send button when text changes
+    if (messageText.trim().length > 0) {
+      Animated.spring(sendButtonAnimation, {
+        toValue: 1,
+        useNativeDriver: true,
+        tension: 100,
+        friction: 8,
+      }).start();
+    } else {
+      Animated.spring(sendButtonAnimation, {
+        toValue: 0,
+        useNativeDriver: true,
+        tension: 100,
+        friction: 8,
+      }).start();
+    }
+  }, [messageText]);
+
   const translateY = drawerAnimation.interpolate({
     inputRange: [0, 1],
     outputRange: [drawerHeight, 0],
+  });
+
+  const sendButtonScale = sendButtonAnimation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+
+  const sendButtonOpacity = sendButtonAnimation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
   });
 
   const openMediaDrawer = () => {
@@ -411,15 +444,17 @@ const ChatScreen = ({ route, navigation }) => {
     setMessageText(prevText => prevText + emojiObject.emoji);
   };
 
-  const renderMessage = ({ item }) => {
+  const renderMessage = ({ item, index }) => {
     const isCurrentUser = item.senderId === currentUser?.uid;
+    const showAvatar = index === 0 || messages[index - 1].senderId !== item.senderId;
+    const showName = !isCurrentUser && (index === 0 || messages[index - 1].senderId !== item.senderId);
 
     return (
       <View style={[
         styles.messageContainer,
         isCurrentUser ? styles.currentUserMessage : styles.otherUserMessage
       ]}>
-        {!isCurrentUser && (
+        {!isCurrentUser && showAvatar && (
           recipient.photoURL ? (
             <Image
               source={{ uri: recipient.photoURL }}
@@ -435,48 +470,89 @@ const ChatScreen = ({ route, navigation }) => {
           )
         )}
 
+        {!isCurrentUser && !showAvatar && <View style={styles.avatarSpacer} />}
+
         <View style={[
-          styles.messageBubble,
-          isCurrentUser ? styles.currentUserBubble : styles.otherUserBubble
+          styles.messageContent,
+          isCurrentUser ? styles.currentUserContent : styles.otherUserContent
         ]}>
-          {item.type === 'image' && item.mediaUrl ? (
-            <Image 
-              source={{ uri: item.mediaUrl }} 
-              style={styles.mediaPreview}
-              resizeMode="cover"
-            />
-          ) : item.type === 'audio' && item.mediaUrl ? (
-            <View style={styles.audioMessage}>
-              <MaterialIcons name="audiotrack" size={24} color={isCurrentUser ? 'white' : '#4a69bd'} />
-              <Text style={[styles.audioDuration, { color: isCurrentUser ? 'rgba(255,255,255,0.7)' : 'rgba(47,53,66,0.5)' }]}>
-                0:30
-              </Text>
-            </View>
-          ) : item.type === 'file' && item.mediaUrl ? (
-            <View style={styles.fileMessage}>
-              <MaterialIcons name="insert-drive-file" size={24} color={isCurrentUser ? 'white' : '#4a69bd'} />
-              <Text style={[styles.fileName, { color: isCurrentUser ? 'white' : '#2f3542' }]} numberOfLines={1}>
-                {item.text}
-              </Text>
-            </View>
-          ) : (
-            <Text style={isCurrentUser ? styles.currentUserText : styles.otherUserText}>
-              {item.text}
+          {showName && !isCurrentUser && (
+            <Text style={styles.senderName}>
+              {recipient.displayName || recipient.email || 'Unknown User'}
             </Text>
           )}
           
-          <Text style={[
-            styles.timestamp,
-            isCurrentUser ? styles.currentUserTimestamp : styles.otherUserTimestamp
+          <View style={[
+            styles.messageBubble,
+            isCurrentUser ? styles.currentUserBubble : styles.otherUserBubble,
+            showAvatar && (isCurrentUser ? styles.currentUserFirstBubble : styles.otherUserFirstBubble)
           ]}>
-            {new Date(item.timestamp).toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit'
-            })}
-          </Text>
+            {item.type === 'image' && item.mediaUrl ? (
+              <TouchableOpacity activeOpacity={0.9}>
+                <Image 
+                  source={{ uri: item.mediaUrl }} 
+                  style={styles.mediaPreview}
+                  resizeMode="cover"
+                />
+              </TouchableOpacity>
+            ) : item.type === 'audio' && item.mediaUrl ? (
+              <View style={styles.audioMessage}>
+                <TouchableOpacity style={styles.audioPlayButton}>
+                  <MaterialIcons name="play-arrow" size={28} color={isCurrentUser ? 'white' : '#4a69bd'} />
+                </TouchableOpacity>
+                <View style={styles.audioWaveform}>
+                  <View style={[styles.audioWaveBar, { height: 20, backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.6)' : 'rgba(74,105,189,0.4)' }]} />
+                  <View style={[styles.audioWaveBar, { height: 30, backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.8)' : 'rgba(74,105,189,0.6)' }]} />
+                  <View style={[styles.audioWaveBar, { height: 25, backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.7)' : 'rgba(74,105,189,0.5)' }]} />
+                  <View style={[styles.audioWaveBar, { height: 15, backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.5)' : 'rgba(74,105,189,0.3)' }]} />
+                </View>
+                <Text style={[styles.audioDuration, { color: isCurrentUser ? 'rgba(255,255,255,0.7)' : 'rgba(47,53,66,0.5)' }]}>
+                  {formatRecordTime(30)}
+                </Text>
+              </View>
+            ) : item.type === 'file' && item.mediaUrl ? (
+              <TouchableOpacity style={styles.fileMessage} activeOpacity={0.7}>
+                <View style={[styles.fileIconContainer, { backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : 'rgba(74,105,189,0.1)' }]}>
+                  <MaterialIcons name="insert-drive-file" size={24} color={isCurrentUser ? 'white' : '#4a69bd'} />
+                </View>
+                <View style={styles.fileInfo}>
+                  <Text style={[styles.fileName, { color: isCurrentUser ? 'white' : '#2f3542' }]} numberOfLines={1}>
+                    {item.text}
+                  </Text>
+                  <Text style={[styles.fileSize, { color: isCurrentUser ? 'rgba(255,255,255,0.7)' : 'rgba(47,53,66,0.5)' }]}>
+                    2.4 MB • PDF
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <Text style={isCurrentUser ? styles.currentUserText : styles.otherUserText}>
+                {item.text}
+              </Text>
+            )}
+            
+            <View style={styles.messageFooter}>
+              <Text style={[
+                styles.timestamp,
+                isCurrentUser ? styles.currentUserTimestamp : styles.otherUserTimestamp
+              ]}>
+                {new Date(item.timestamp).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </Text>
+              {isCurrentUser && (
+                <Ionicons 
+                  name="checkmark-done" 
+                  size={14} 
+                  color={item.read ? '#4a69bd' : 'rgba(255,255,255,0.5)'} 
+                  style={styles.readIndicator} 
+                />
+              )}
+            </View>
+          </View>
         </View>
 
-        {isCurrentUser && (
+        {isCurrentUser && showAvatar && (
           currentUser.photoURL ? (
             <Image
               source={{ uri: currentUser.photoURL }}
@@ -491,6 +567,8 @@ const ChatScreen = ({ route, navigation }) => {
             </View>
           )
         )}
+
+        {isCurrentUser && !showAvatar && <View style={styles.avatarSpacer} />}
       </View>
     );
   };
@@ -498,7 +576,7 @@ const ChatScreen = ({ route, navigation }) => {
   if (loading) {
     return (
       <SafeAreaView style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#4a69bd" />
+        <ActivityIndicator size="large" color="#6c5ce7" />
         <Text style={styles.loadingText}>Loading chat...</Text>
       </SafeAreaView>
     );
@@ -507,7 +585,7 @@ const ChatScreen = ({ route, navigation }) => {
   if (!currentUser) {
     return (
       <SafeAreaView style={styles.centerContainer}>
-        <Ionicons name="chatbubble-ellipses-outline" size={wp('15%')} color="#ccc" />
+        <Ionicons name="chatbubble-ellipses-outline" size={wp('15%')} color="#ddd" />
         <Text style={styles.errorText}>You need to be logged in to use the chat</Text>
       </SafeAreaView>
     );
@@ -520,32 +598,30 @@ const ChatScreen = ({ route, navigation }) => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="arrow-back" size={wp('5%')} color="#4a69bd" />
+          <Ionicons name="chevron-back" size={wp('5.5%')} color="#2d3436" />
         </TouchableOpacity>
 
-        <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {recipient.displayName || recipient.email || 'Unknown User'}
-          </Text>
-          <Text style={styles.headerSubtitle} numberOfLines={1}>
-            {isTyping ? 'Typing...' : recipient.email}
-          </Text>
-        </View>
+        <TouchableOpacity style={styles.headerInfo} onPress={() => {}}>
+          <View style={styles.headerUser}>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {recipient.displayName || recipient.email || 'Unknown User'}
+            </Text>
+            <Text style={styles.headerSubtitle} numberOfLines={1}>
+              {isTyping ? 'Typing...' : 'Online'}
+            </Text>
+          </View>
+        </TouchableOpacity>
 
-        <View style={styles.headerRight}>
-          {recipient.photoURL ? (
-            <Image
-              source={{ uri: recipient.photoURL }}
-              style={styles.headerAvatar}
-            />
-          ) : (
-            <View style={[styles.headerAvatar, styles.headerAvatarPlaceholder]}>
-              <Text style={styles.headerAvatarText}>
-                {recipient.displayName ? recipient.displayName.charAt(0).toUpperCase() :
-                  recipient.email ? recipient.email.charAt(0).toUpperCase() : 'U'}
-              </Text>
-            </View>
-          )}
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.headerButton}>
+            <Ionicons name="videocam" size={wp('5.5%')} color="#2d3436" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerButton}>
+            <Ionicons name="call" size={wp('5%')} color="#2d3436" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerButton}>
+            <Ionicons name="ellipsis-vertical" size={wp('4.5%')} color="#2d3436" />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -572,9 +648,12 @@ const ChatScreen = ({ route, navigation }) => {
             }
           }}
           inverted={false}
+          showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={styles.emptyChatContainer}>
-              <Ionicons name="chatbubbles-outline" size={wp('15%')} color="#ccc" />
+              <View style={styles.emptyChatIcon}>
+                <Ionicons name="chatbubbles-outline" size={wp('20%')} color="#dfe6e9" />
+              </View>
               <Text style={styles.emptyChatText}>No messages yet</Text>
               <Text style={styles.emptyChatSubtext}>
                 Start the conversation by sending a message
@@ -586,42 +665,44 @@ const ChatScreen = ({ route, navigation }) => {
         {isRecording && (
           <View style={styles.recordingContainer}>
             <View style={styles.recordingIndicator}>
-              <View style={styles.recordingDot} />
+              <View style={styles.recordingPulse} />
               <Text style={styles.recordingText}>Recording... {formatRecordTime(recordTime)}</Text>
             </View>
             <TouchableOpacity onPress={stopRecording} style={styles.stopButton}>
-              <Text style={styles.stopButtonText}>Stop</Text>
+              <Ionicons name="stop" size={wp('5%')} color="white" />
             </TouchableOpacity>
           </View>
         )}
 
         {/* Input Container with Text Input, Emoji Picker, and Media Picker */}
         <View style={styles.inputContainer}>
-          <TouchableOpacity 
-            onPress={() => setShowEmojiPicker(true)}
-            style={styles.emojiButton}
-          >
-            <Ionicons name="happy-outline" size={wp('5.5%')} color="#747d8c" />
-          </TouchableOpacity>
+          <View style={styles.inputWrapper}>
+            <TouchableOpacity 
+              onPress={() => setShowEmojiPicker(true)}
+              style={styles.emojiButton}
+            >
+              <Ionicons name="happy-outline" size={wp('6%')} color="#636e72" />
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              onPress={openMediaDrawer}
+              style={styles.attachButton}
+            >
+              <Ionicons name="attach" size={wp('6%')} color="#636e72" />
+            </TouchableOpacity>
+            
+            <TextInput
+              style={styles.textInput}
+              value={messageText}
+              onChangeText={setMessageText}
+              placeholder="Type a message..."
+              placeholderTextColor="#b2bec3"
+              multiline
+              maxLength={500}
+            />
+          </View>
           
-          <TouchableOpacity 
-            onPress={openMediaDrawer}
-            style={styles.attachButton}
-          >
-            <Ionicons name="add" size={wp('5.5%')} color="#747d8c" />
-          </TouchableOpacity>
-          
-          <TextInput
-            style={styles.textInput}
-            value={messageText}
-            onChangeText={setMessageText}
-            placeholder="Type a message..."
-            placeholderTextColor="#999"
-            multiline
-            maxLength={500}
-          />
-          
-          {messageText.trim() ? (
+          {messageText.trim().length > 0 ? (
             <TouchableOpacity
               style={[styles.sendButton, sending && styles.disabledButton]}
               onPress={() => handleSendMessage()}
@@ -630,7 +711,7 @@ const ChatScreen = ({ route, navigation }) => {
               {sending ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <Ionicons name="send" size={wp('4.5%')} color="#fff" />
+                <Ionicons name="send" size={wp('5%')} color="#fff" />
               )}
             </TouchableOpacity>
           ) : (
@@ -638,7 +719,7 @@ const ChatScreen = ({ route, navigation }) => {
               onPress={recordAudio}
               style={styles.micButton}
             >
-              <Ionicons name="mic" size={wp('5.5%')} color="#747d8c" />
+              <Ionicons name="mic" size={wp('6%')} color="#636e72" />
             </TouchableOpacity>
           )}
         </View>
@@ -666,29 +747,29 @@ const ChatScreen = ({ route, navigation }) => {
             
             <View style={styles.mediaOptions}>
               <TouchableOpacity style={styles.mediaOption} onPress={takePhoto}>
-                <View style={[styles.mediaOptionIcon, { backgroundColor: '#4a69bd' }]}>
-                  <Ionicons name="camera" size={wp('6%')} color="white" />
+                <View style={[styles.mediaOptionIcon, styles.cameraOption]}>
+                  <Ionicons name="camera" size={wp('7%')} color="white" />
                 </View>
                 <Text style={styles.mediaOptionText}>Camera</Text>
               </TouchableOpacity>
               
               <TouchableOpacity style={styles.mediaOption} onPress={pickImage}>
-                <View style={[styles.mediaOptionIcon, { backgroundColor: '#e74c3c' }]}>
-                  <Ionicons name="image" size={wp('6%')} color="white" />
+                <View style={[styles.mediaOptionIcon, styles.galleryOption]}>
+                  <Ionicons name="image" size={wp('7%')} color="white" />
                 </View>
                 <Text style={styles.mediaOptionText}>Gallery</Text>
               </TouchableOpacity>
               
               <TouchableOpacity style={styles.mediaOption} onPress={recordAudio}>
-                <View style={[styles.mediaOptionIcon, { backgroundColor: '#9b59b6' }]}>
-                  <Ionicons name="mic" size={wp('6%')} color="white" />
+                <View style={[styles.mediaOptionIcon, styles.audioOption]}>
+                  <Ionicons name="mic" size={wp('7%')} color="white" />
                 </View>
                 <Text style={styles.mediaOptionText}>Audio</Text>
               </TouchableOpacity>
               
               <TouchableOpacity style={styles.mediaOption} onPress={pickDocument}>
-                <View style={[styles.mediaOptionIcon, { backgroundColor: '#f39c12' }]}>
-                  <Ionicons name="document" size={wp('6%')} color="white" />
+                <View style={[styles.mediaOptionIcon, styles.documentOption]}>
+                  <Ionicons name="document" size={wp('7%')} color="white" />
                 </View>
                 <Text style={styles.mediaOptionText}>Document</Text>
               </TouchableOpacity>
@@ -704,18 +785,18 @@ const ChatScreen = ({ route, navigation }) => {
         onClose={() => setShowEmojiPicker(false)}
         theme={{
           backdrop: '#00000080',
-          container: '#f8f9fa',
-          header: '#4a69bd',
+          container: '#fff',
+          header: '#6c5ce7',
           skinTonesContainer: '#ffffff',
           category: {
-            icon: '#4a69bd',
-            iconActive: '#1e3a8a'
+            icon: '#6c5ce7',
+            iconActive: '#3b3b98'
           },
           search: {
-            background: '#ffffff',
-            placeholder: '#747d8c',
-            icon: '#747d8c',
-            text: '#2f3542'
+            background: '#f8f9fa',
+            placeholder: '#b2bec3',
+            icon: '#b2bec3',
+            text: '#2d3436'
           }
         }}
       />
@@ -725,9 +806,9 @@ const ChatScreen = ({ route, navigation }) => {
 
 const styles = StyleSheet.create({
   container: {
+    marginTop:hp('4%'),
     flex: 1,
     backgroundColor: '#f8f9fa',
-    marginTop: hp('4%')
   },
   flex1: {
     flex: 1,
@@ -742,18 +823,21 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: hp('2%'),
     fontSize: wp('4%'),
-    color: '#747d8c',
+    color: '#636e72',
+    fontFamily: 'Inter-Medium',
   },
   errorText: {
     marginTop: hp('2%'),
     fontSize: wp('4%'),
-    color: '#747d8c',
+    color: '#636e72',
     textAlign: 'center',
+    fontFamily: 'Inter-Regular',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: wp('4%'),
+    paddingTop: hp('2%'),
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#f1f2f6',
@@ -762,44 +846,40 @@ const styles = StyleSheet.create({
       width: 0,
       height: 2,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowOpacity: 0.05,
+    shadowRadius: 3.84,
+    elevation: 5,
+    zIndex: 10,
   },
   backButton: {
-    marginRight: wp('3%'),
     padding: wp('1%'),
+    marginRight: wp('2%'),
   },
   headerInfo: {
     flex: 1,
   },
+  headerUser: {
+    flex: 1,
+  },
   headerTitle: {
-    fontSize: wp('4.5%'),
+    fontSize: wp('4.8%'),
     fontWeight: '600',
-    color: '#2f3542',
+    color: '#2d3436',
+    fontFamily: 'Inter-SemiBold',
   },
   headerSubtitle: {
     fontSize: wp('3.5%'),
-    color: '#747d8c',
-    marginTop: hp('0.5%'),
+    color: '#636e72',
+    marginTop: hp('0.3%'),
+    fontFamily: 'Inter-Regular',
   },
-  headerRight: {
-    marginLeft: wp('3%'),
-  },
-  headerAvatar: {
-    width: wp('12%'),
-    height: wp('12%'),
-    borderRadius: wp('6%'),
-  },
-  headerAvatarPlaceholder: {
-    backgroundColor: '#4a69bd',
-    justifyContent: 'center',
+  headerActions: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  headerAvatarText: {
-    color: '#fff',
-    fontSize: wp('5%'),
-    fontWeight: '600',
+  headerButton: {
+    padding: wp('2%'),
+    marginLeft: wp('1%'),
   },
   messagesList: {
     flex: 1,
@@ -813,8 +893,19 @@ const styles = StyleSheet.create({
   },
   messageContainer: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    marginBottom: hp('2%'),
+    alignItems: 'flex-start',
+    marginBottom: hp('1.2%'),
+  },
+  messageContent: {
+    flex: 1,
+    marginHorizontal: wp('1.5%'),
+  },
+  senderName: {
+    fontSize: wp('3.2%'),
+    color: '#636e72',
+    marginBottom: hp('0.5%'),
+    marginLeft: wp('1%'),
+    fontFamily: 'Inter-Medium',
   },
   currentUserMessage: {
     justifyContent: 'flex-end',
@@ -822,38 +913,46 @@ const styles = StyleSheet.create({
   otherUserMessage: {
     justifyContent: 'flex-start',
   },
+  currentUserContent: {
+    alignItems: 'flex-end',
+  },
+  otherUserContent: {
+    alignItems: 'flex-start',
+  },
   avatarSmall: {
     width: wp('8%'),
     height: wp('8%'),
     borderRadius: wp('4%'),
-    marginHorizontal: wp('1.5%'),
+  },
+  avatarSpacer: {
+    width: wp('8%'),
   },
   avatarPlaceholderSmall: {
-    backgroundColor: '#4a69bd',
+    backgroundColor: '#6c5ce7',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.41,
+    elevation: 2,
   },
   currentUserAvatar: {
-    backgroundColor: '#74b9ff',
+    backgroundColor: '#00b894',
   },
   avatarSmallText: {
     color: '#fff',
     fontSize: wp('3.5%'),
     fontWeight: '600',
+    fontFamily: 'Inter-SemiBold',
   },
   messageBubble: {
-    maxWidth: '70%',
+    maxWidth: '80%',
     padding: wp('3.5%'),
     borderRadius: wp('4%'),
-    marginHorizontal: wp('1.5%'),
-  },
-  currentUserBubble: {
-    backgroundColor: '#4a69bd',
-    borderBottomRightRadius: wp('1%'),
-  },
-  otherUserBubble: {
-    backgroundColor: '#fff',
-    borderBottomLeftRadius: wp('1%'),
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -863,125 +962,198 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
+  currentUserBubble: {
+    backgroundColor: '#6c5ce7',
+  },
+  otherUserBubble: {
+    backgroundColor: '#fff',
+  },
+  currentUserFirstBubble: {
+    borderBottomRightRadius: wp('1%'),
+  },
+  otherUserFirstBubble: {
+    borderBottomLeftRadius: wp('1%'),
+  },
   currentUserText: {
     color: 'white',
     fontSize: wp('4%'),
     lineHeight: hp('2.5%'),
+    fontFamily: 'Inter-Regular',
   },
   otherUserText: {
-    color: '#2f3542',
+    color: '#2d3436',
     fontSize: wp('4%'),
     lineHeight: hp('2.5%'),
+    fontFamily: 'Inter-Regular',
   },
   mediaPreview: {
     width: wp('60%'),
     height: wp('45%'),
-    borderRadius: wp('2%'),
+    borderRadius: wp('3%'),
     marginBottom: hp('1%'),
   },
   audioMessage: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: hp('1%'),
+    marginBottom: hp('0.5%'),
+  },
+  audioPlayButton: {
+    padding: wp('2%'),
+    marginRight: wp('2%'),
+  },
+  audioWaveform: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    height: wp('8%'),
+    marginRight: wp('3%'),
+  },
+  audioWaveBar: {
+    width: wp('1.5%'),
+    borderRadius: wp('0.75%'),
+    marginHorizontal: wp('0.5%'),
   },
   audioDuration: {
-    marginLeft: wp('2%'),
-    fontSize: wp('3.5%'),
+    fontSize: wp('3.2%'),
+    fontFamily: 'Inter-Medium',
   },
   fileMessage: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: hp('1%'),
+    marginBottom: hp('0.5%'),
+  },
+  fileIconContainer: {
+    padding: wp('2.5%'),
+    borderRadius: wp('2%'),
+    marginRight: wp('3%'),
+  },
+  fileInfo: {
+    flex: 1,
   },
   fileName: {
-    marginLeft: wp('2%'),
-    fontSize: wp('3.5%'),
-    maxWidth: wp('45%'),
+    fontSize: wp('3.8%'),
+    fontFamily: 'Inter-Medium',
+    marginBottom: hp('0.3%'),
+  },
+  fileSize: {
+    fontSize: wp('3%'),
+    fontFamily: 'Inter-Regular',
+  },
+  messageFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginTop: hp('0.5%'),
   },
   timestamp: {
-    fontSize: wp('2.5%'),
-    marginTop: hp('0.5%'),
-    alignSelf: 'flex-end',
+    fontSize: wp('2.8%'),
+    fontFamily: 'Inter-Regular',
   },
   currentUserTimestamp: {
     color: 'rgba(255,255,255,0.7)',
   },
   otherUserTimestamp: {
-    color: 'rgba(47,53,66,0.5)',
+    color: 'rgba(45,52,54,0.5)',
   },
-  inputContainer: {
+  readIndicator: {
+    marginLeft: wp('1.5%'),
+  },
+   inputContainer: {
     flexDirection: 'row',
-    padding: wp('3%'),
+    alignItems: 'flex-end',
+    paddingHorizontal: wp('3%'),
+    paddingVertical: hp('1%'),
     backgroundColor: 'white',
     borderTopWidth: 1,
     borderTopColor: '#f1f2f6',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: -2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 5,
+  },
+  inputWrapper: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'flex-end',
+    backgroundColor: '#f8f9fa',
+    borderRadius: wp('5%'),
+    paddingHorizontal: wp('2%'),
+    paddingVertical: hp('0.8%'),
   },
   emojiButton: {
     padding: wp('2%'),
-    marginRight: wp('1%'),
-    marginBottom: wp('1%'),
   },
   attachButton: {
     padding: wp('2%'),
-    marginRight: wp('2%'),
-    marginBottom: wp('1%'),
   },
   textInput: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: wp('6%'),
-    paddingHorizontal: wp('4%'),
-    paddingVertical: wp('3%'),
-    marginRight: wp('2%'),
-    maxHeight: hp('15%'),
     fontSize: wp('4%'),
-    backgroundColor: '#f8f9fa',
+    maxHeight: hp('20%'),
+    paddingVertical: hp('0.8%'),
+    paddingHorizontal: wp('2%'),
+    color: '#2d3436',
+    fontFamily: 'Inter-Regular',
   },
   sendButton: {
-    backgroundColor: '#4a69bd',
-    width: wp('13%'),
-    height: wp('13%'),
-    borderRadius: wp('6.5%'),
+    marginLeft: wp('2%'),
+    backgroundColor: '#6c5ce7',
+    borderRadius: wp('6%'),
+    padding: wp('3%'),
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: wp('0.5%'),
-  },
-  micButton: {
-    width: wp('13%'),
-    height: wp('13%'),
-    borderRadius: wp('6.5%'),
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: wp('0.5%'),
   },
   disabledButton: {
-    backgroundColor: '#ccc',
+    opacity: 0.6,
   },
-  emptyChatContainer: {
-    flex: 1,
+  micButton: {
+    marginLeft: wp('2%'),
+    backgroundColor: '#f1f2f6',
+    borderRadius: wp('6%'),
+    padding: wp('3%'),
     justifyContent: 'center',
     alignItems: 'center',
-    padding: wp('10%'),
-    minHeight: hp('50%'),
   },
-  emptyChatText: {
-    marginTop: hp('2%'),
-    fontSize: wp('4.5%'),
-    fontWeight: '600',
-    color: '#2f3542',
-    textAlign: 'center',
+  recordingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ff7675',
+    marginHorizontal: wp('3%'),
+    marginBottom: hp('1%'),
+    borderRadius: wp('4%'),
+    paddingHorizontal: wp('4%'),
+    paddingVertical: hp('1.5%'),
   },
-  emptyChatSubtext: {
-    marginTop: hp('1%'),
+  recordingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  recordingPulse: {
+    width: wp('3%'),
+    height: wp('3%'),
+    borderRadius: wp('1.5%'),
+    backgroundColor: 'white',
+    marginRight: wp('2%'),
+  },
+  recordingText: {
+    color: 'white',
     fontSize: wp('3.5%'),
-    color: '#747d8c',
-    textAlign: 'center',
+    fontFamily: 'Inter-Medium',
+  },
+  stopButton: {
+    backgroundColor: '#d63031',
+    borderRadius: wp('5%'),
+    padding: wp('2.5%'),
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   drawerOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    flex: 1,
+    backgroundColor: '#00000060',
   },
   mediaDrawer: {
     position: 'absolute',
@@ -989,17 +1161,18 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: 'white',
-    borderTopLeftRadius: wp('5%'),
-    borderTopRightRadius: wp('5%'),
-    padding: wp('5%'),
-    paddingBottom: hp('5%'),
+    borderTopLeftRadius: wp('6%'),
+    borderTopRightRadius: wp('6%'),
+    paddingBottom: hp('3%'),
+    paddingTop: hp('1%'),
+    paddingHorizontal: wp('5%'),
   },
   drawerHandle: {
-    width: wp('15%'),
-    height: wp('1.5%'),
-    backgroundColor: '#ddd',
-    borderRadius: wp('1%'),
     alignSelf: 'center',
+    width: wp('15%'),
+    height: hp('0.8%'),
+    borderRadius: hp('0.4%'),
+    backgroundColor: '#dfe6e9',
     marginBottom: hp('2%'),
   },
   mediaOptions: {
@@ -1008,53 +1181,54 @@ const styles = StyleSheet.create({
   },
   mediaOption: {
     alignItems: 'center',
+    width: wp('20%'),
   },
   mediaOptionIcon: {
-    width: wp('15%'),
-    height: wp('15%'),
-    borderRadius: wp('3%'),
+    width: wp('14%'),
+    height: wp('14%'),
+    borderRadius: wp('7%'),
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: hp('1%'),
   },
+  cameraOption: {
+    backgroundColor: '#0984e3',
+  },
+  galleryOption: {
+    backgroundColor: '#6c5ce7',
+  },
+  audioOption: {
+    backgroundColor: '#00b894',
+  },
+  documentOption: {
+    backgroundColor: '#fd79a8',
+  },
   mediaOptionText: {
+    fontSize: wp('3.2%'),
+    color: '#2d3436',
+    fontFamily: 'Inter-Medium',
+  },
+  emptyChatContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: hp('20%'),
+  },
+  emptyChatIcon: {
+    marginBottom: hp('2%'),
+  },
+  emptyChatText: {
+    fontSize: wp('4.5%'),
+    fontFamily: 'Inter-SemiBold',
+    color: '#2d3436',
+    marginBottom: hp('0.5%'),
+  },
+  emptyChatSubtext: {
     fontSize: wp('3.5%'),
-    color: '#2f3542',
-    marginTop: hp('0.5%'),
-  },
-  recordingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: wp('4%'),
-    backgroundColor: '#ff6b6b',
-  },
-  recordingIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  recordingDot: {
-    width: wp('3%'),
-    height: wp('3%'),
-    borderRadius: wp('1.5%'),
-    backgroundColor: 'white',
-    marginRight: wp('3%'),
-  },
-  recordingText: {
-    color: 'white',
-    fontSize: wp('4%'),
-    fontWeight: '500',
-  },
-  stopButton: {
-    paddingHorizontal: wp('4%'),
-    paddingVertical: wp('2%'),
-    backgroundColor: 'white',
-    borderRadius: wp('2%'),
-  },
-  stopButtonText: {
-    color: '#ff6b6b',
-    fontWeight: 'bold',
+    fontFamily: 'Inter-Regular',
+    color: '#636e72',
+    textAlign: 'center',
+    paddingHorizontal: wp('10%'),
   },
 });
-
 export default ChatScreen;
