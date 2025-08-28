@@ -344,7 +344,9 @@ const ChatScreen = ({ route, navigation }) => {
     }
   };
 
-  const startRecording = async () => {
+  const recordAudio = async () => {
+    closeMediaDrawer();
+    
     try {
       if (audioPermission !== 'granted') {
         Alert.alert('Permission needed', 'Microphone permission is required to record audio');
@@ -547,96 +549,99 @@ const ChatScreen = ({ route, navigation }) => {
         </View>
       </View>
 
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        renderItem={renderMessage}
-        keyExtractor={item => item.id}
-        style={styles.messagesList}
-        contentContainerStyle={styles.messagesContent}
-        onContentSizeChange={() => {
-          if (flatListRef.current && messages.length > 0) {
-            flatListRef.current.scrollToEnd({ animated: true });
-          }
-        }}
-        onLayout={() => {
-          if (flatListRef.current && messages.length > 0) {
-            flatListRef.current.scrollToEnd({ animated: false });
-          }
-        }}
-        inverted={false} // Ensure this is false to start from bottom
-        ListEmptyComponent={
-          <View style={styles.emptyChatContainer}>
-            <Ionicons name="chatbubbles-outline" size={wp('15%')} color="#ccc" />
-            <Text style={styles.emptyChatText}>No messages yet</Text>
-            <Text style={styles.emptyChatSubtext}>
-              Start the conversation by sending a message
-            </Text>
-          </View>
-        }
-      />
-
-      {isRecording && (
-        <View style={styles.recordingContainer}>
-          <View style={styles.recordingIndicator}>
-            <View style={styles.recordingDot} />
-            <Text style={styles.recordingText}>Recording... {formatRecordTime(recordTime)}</Text>
-          </View>
-          <TouchableOpacity onPress={stopRecording} style={styles.stopButton}>
-            <Text style={styles.stopButtonText}>Stop</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      <KeyboardAvoidingView
+      <KeyboardAvoidingView 
+        style={styles.flex1}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? hp('6%') : 0}
-        style={styles.inputContainer}
       >
-        <TouchableOpacity 
-          onPress={() => setShowEmojiPicker(true)}
-          style={styles.emojiButton}
-        >
-          <Ionicons name="happy-outline" size={wp('5.5%')} color="#747d8c" />
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          onPress={openMediaDrawer}
-          style={styles.attachButton}
-        >
-          <Ionicons name="add" size={wp('5.5%')} color="#747d8c" />
-        </TouchableOpacity>
-        
-        <TextInput
-          style={styles.textInput}
-          value={messageText}
-          onChangeText={setMessageText}
-          placeholder="Type a message..."
-          placeholderTextColor="#999"
-          multiline
-          maxLength={500}
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          renderItem={renderMessage}
+          keyExtractor={item => item.id}
+          style={styles.messagesList}
+          contentContainerStyle={styles.messagesContent}
+          onContentSizeChange={() => {
+            if (flatListRef.current && messages.length > 0) {
+              flatListRef.current.scrollToEnd({ animated: true });
+            }
+          }}
+          onLayout={() => {
+            if (flatListRef.current && messages.length > 0) {
+              flatListRef.current.scrollToEnd({ animated: false });
+            }
+          }}
+          inverted={false}
+          ListEmptyComponent={
+            <View style={styles.emptyChatContainer}>
+              <Ionicons name="chatbubbles-outline" size={wp('15%')} color="#ccc" />
+              <Text style={styles.emptyChatText}>No messages yet</Text>
+              <Text style={styles.emptyChatSubtext}>
+                Start the conversation by sending a message
+              </Text>
+            </View>
+          }
         />
-        
-        {messageText.trim() ? (
-          <TouchableOpacity
-            style={[styles.sendButton, sending && styles.disabledButton]}
-            onPress={() => handleSendMessage()}
-            disabled={sending}
-          >
-            {sending ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Ionicons name="send" size={wp('4.5%')} color="#fff" />
-            )}
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            onPress={startRecording}
-            style={styles.micButton}
-          >
-            <Ionicons name="mic" size={wp('5.5%')} color="#747d8c" />
-          </TouchableOpacity>
+
+        {isRecording && (
+          <View style={styles.recordingContainer}>
+            <View style={styles.recordingIndicator}>
+              <View style={styles.recordingDot} />
+              <Text style={styles.recordingText}>Recording... {formatRecordTime(recordTime)}</Text>
+            </View>
+            <TouchableOpacity onPress={stopRecording} style={styles.stopButton}>
+              <Text style={styles.stopButtonText}>Stop</Text>
+            </TouchableOpacity>
+          </View>
         )}
+
+        {/* Input Container with Text Input, Emoji Picker, and Media Picker */}
+        <View style={styles.inputContainer}>
+          <TouchableOpacity 
+            onPress={() => setShowEmojiPicker(true)}
+            style={styles.emojiButton}
+          >
+            <Ionicons name="happy-outline" size={wp('5.5%')} color="#747d8c" />
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            onPress={openMediaDrawer}
+            style={styles.attachButton}
+          >
+            <Ionicons name="add" size={wp('5.5%')} color="#747d8c" />
+          </TouchableOpacity>
+          
+          <TextInput
+            style={styles.textInput}
+            value={messageText}
+            onChangeText={setMessageText}
+            placeholder="Type a message..."
+            placeholderTextColor="#999"
+            multiline
+            maxLength={500}
+          />
+          
+          {messageText.trim() ? (
+            <TouchableOpacity
+              style={[styles.sendButton, sending && styles.disabledButton]}
+              onPress={() => handleSendMessage()}
+              disabled={sending}
+            >
+              {sending ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="send" size={wp('4.5%')} color="#fff" />
+              )}
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              onPress={recordAudio}
+              style={styles.micButton}
+            >
+              <Ionicons name="mic" size={wp('5.5%')} color="#747d8c" />
+            </TouchableOpacity>
+          )}
+        </View>
       </KeyboardAvoidingView>
 
       {/* Media Picker Bottom Sheet */}
@@ -672,6 +677,13 @@ const ChatScreen = ({ route, navigation }) => {
                   <Ionicons name="image" size={wp('6%')} color="white" />
                 </View>
                 <Text style={styles.mediaOptionText}>Gallery</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity style={styles.mediaOption} onPress={recordAudio}>
+                <View style={[styles.mediaOptionIcon, { backgroundColor: '#9b59b6' }]}>
+                  <Ionicons name="mic" size={wp('6%')} color="white" />
+                </View>
+                <Text style={styles.mediaOptionText}>Audio</Text>
               </TouchableOpacity>
               
               <TouchableOpacity style={styles.mediaOption} onPress={pickDocument}>
@@ -716,6 +728,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8f9fa',
     marginTop: hp('4%')
+  },
+  flex1: {
+    flex: 1,
   },
   centerContainer: {
     flex: 1,
