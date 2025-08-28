@@ -1,6 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, getDocs } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  getDocs,
+  onSnapshot,
+  query,
+  updateDoc,
+  where
+} from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -24,6 +32,9 @@ const ChatListScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const [unreadCounts, setUnreadCounts] = useState({});
+  const [lastMessages, setLastMessages] = useState({});
+  const [chatDataMap, setChatDataMap] = useState({}); // To store chat data by participant ID
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
@@ -40,6 +51,73 @@ const ChatListScreen = ({ navigation }) => {
       unsubscribeAuth();
     };
   }, []);
+
+  // Listen for chat documents where current user is a participant
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const chatsRef = collection(db, 'chats');
+    const q = query(
+      chatsRef,
+      where('participants', 'array-contains', currentUser.uid)
+    );
+
+    const unsubscribe = onSnapshot(q, 
+      (querySnapshot) => {
+        const counts = {};
+        const messages = {};
+        const chatMap = {};
+        
+        querySnapshot.forEach((doc) => {
+          const chatData = doc.data();
+          const chatId = doc.id;
+          
+          // Find the other participant
+          const otherParticipant = chatData.participants.find(
+            id => id !== currentUser.uid
+          );
+          
+          if (otherParticipant) {
+            // Store chat data by participant ID
+            chatMap[otherParticipant] = {
+              chatId,
+              ...chatData
+            };
+            
+            // Store unread count if available
+            if (chatData.unreadCounts && chatData.unreadCounts[currentUser.uid]) {
+              counts[otherParticipant] = chatData.unreadCounts[currentUser.uid];
+            } else {
+              counts[otherParticipant] = 0;
+            }
+            
+            // Store last message if available
+            if (chatData.lastMessage) {
+              messages[otherParticipant] = {
+                text: chatData.lastMessage.text,
+                createdAt: chatData.lastMessage.createdAt?.toDate() || new Date(0)
+              };
+            }
+          }
+        });
+        
+        setUnreadCounts(counts);
+        setLastMessages(messages);
+        setChatDataMap(chatMap);
+      },
+      (error) => {
+        console.log('Error listening to chats:', error);
+        // If we can't access chats, initialize with zero counts
+        const initialCounts = {};
+        users.forEach(user => {
+          initialCounts[user.uid] = 0;
+        });
+        setUnreadCounts(initialCounts);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [currentUser, users]);
 
   const loadAllUsers = async (currentUserId) => {
     try {
@@ -59,13 +137,19 @@ const ChatListScreen = ({ navigation }) => {
             uid: userData.uid,
             email: userData.email,
             displayName: userData.displayName || userData.name || userData.email.split('@')[0],
-            // Include any other fields you need
           });
         }
       });
       
-      console.log('Users from Firestore:', usersList);
       setUsers(usersList);
+      
+      // Initialize unread counts for all users
+      const initialCounts = {};
+      usersList.forEach(user => {
+        initialCounts[user.uid] = 0;
+      });
+      setUnreadCounts(initialCounts);
+      
       setLoading(false);
       setRefreshing(false);
     } catch (error) {
@@ -76,8 +160,6 @@ const ChatListScreen = ({ navigation }) => {
     }
   };
 
-  // For real-time updates (optional)
-
   const onRefresh = () => {
     setRefreshing(true);
     if (currentUser) {
@@ -85,18 +167,69 @@ const ChatListScreen = ({ navigation }) => {
     }
   };
 
+  // Sort users by last message time and unread status
+  const getSortedUsers = () => {
+    return [...users].sort((a, b) => {
+      // First, prioritize users with unread messages
+      const aUnread = unreadCounts[a.uid] || 0;
+      const bUnread = unreadCounts[b.uid] || 0;
+      
+      if (aUnread > 0 && bUnread === 0) return -1;
+      if (aUnread === 0 && bUnread > 0) return 1;
+      
+      // Then sort by last message time (newest first)
+      const aTime = lastMessages[a.uid]?.createdAt || new Date(0);
+      const bTime = lastMessages[b.uid]?.createdAt || new Date(0);
+      
+      return bTime - aTime;
+    });
+  };
+
+  const markAsRead = async (userId) => {
+    try {
+      const chatData = chatDataMap[userId];
+      if (!chatData) return;
+      
+      const chatRef = doc(db, 'chats', chatData.chatId);
+      const updatedUnreadCounts = {
+        ...chatData.unreadCounts,
+        [currentUser.uid]: 0
+      };
+      
+      await updateDoc(chatRef, {
+        unreadCounts: updatedUnreadCounts
+      });
+      
+      // Update local state
+      setUnreadCounts(prev => ({
+        ...prev,
+        [userId]: 0
+      }));
+    } catch (error) {
+      console.log('Error marking as read:', error);
+    }
+  };
 
   const renderUserItem = ({ item }) => {
-    // Ensure consistent chat ID format
-    const chatId = [currentUser.uid, item.uid].sort().join('_');
+    const unreadCount = unreadCounts[item.uid] || 0;
+    const lastMessage = lastMessages[item.uid];
     
     return (
       <TouchableOpacity
-        style={styles.userItem}
-        onPress={() => navigation.navigate('Chat', { 
-          recipient: item,
-          chatId: chatId
-        })}
+        style={[
+          styles.userItem,
+          unreadCount > 0 && styles.unreadUserItem
+        ]}
+        onPress={async () => {
+          // Mark as read before navigating
+          if (unreadCount > 0) {
+            await markAsRead(item.uid);
+          }
+          navigation.navigate('Chat', { 
+            recipient: item,
+            chatId: chatDataMap[item.uid]?.chatId || [currentUser.uid, item.uid].sort().join('_')
+          });
+        }}
       >
         <View style={styles.avatarContainer}>
           <View style={[styles.avatar, styles.avatarPlaceholder]}>
@@ -104,20 +237,69 @@ const ChatListScreen = ({ navigation }) => {
               {item.displayName ? item.displayName.charAt(0).toUpperCase() : 'U'}
             </Text>
           </View>
+          {unreadCount > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadText}>
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.userInfo}>
-          <Text style={styles.userName} numberOfLines={1}>
+          <Text 
+            style={[
+              styles.userName, 
+              unreadCount > 0 && styles.unreadUserName
+            ]} 
+            numberOfLines={1}
+          >
             {item.displayName || 'Unknown User'}
           </Text>
-          <Text style={styles.userEmail} numberOfLines={1}>
-            {item.email}
-          </Text>
+          {lastMessage ? (
+            <Text 
+              style={[
+                styles.lastMessage,
+                unreadCount > 0 && styles.unreadLastMessage
+              ]} 
+              numberOfLines={1}
+            >
+              {lastMessage.text}
+            </Text>
+          ) : (
+            <Text style={styles.userEmail} numberOfLines={1}>
+              {item.email}
+            </Text>
+          )}
         </View>
 
-        <Ionicons name="chevron-forward" size={wp('5%')} color="#747d8c" />
+        <View style={styles.rightContainer}>
+          {lastMessage && (
+            <Text style={styles.timestamp}>
+              {formatTime(lastMessage.createdAt)}
+            </Text>
+          )}
+          <Ionicons name="chevron-forward" size={wp('5%')} color="#747d8c" />
+        </View>
       </TouchableOpacity>
     );
+  };
+
+  // Helper function to format time
+  const formatTime = (date) => {
+    if (!date) return '';
+    
+    const now = new Date();
+    const messageDate = new Date(date);
+    const diffInHours = (now - messageDate) / (1000 * 60 * 60);
+    
+    if (diffInHours < 24) {
+      return messageDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } else if (diffInHours < 48) {
+      return 'Yesterday';
+    } else {
+      return messageDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    }
   };
 
   if (loading) {
@@ -155,6 +337,8 @@ const ChatListScreen = ({ navigation }) => {
     );
   }
 
+  const sortedUsers = getSortedUsers();
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -169,7 +353,7 @@ const ChatListScreen = ({ navigation }) => {
         </Text>
       </View>
 
-      {users.length === 0 ? (
+      {sortedUsers.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="people-outline" size={wp('15%')} color="#ccc" />
           <Text style={styles.emptyText}>No other users found</Text>
@@ -187,7 +371,7 @@ const ChatListScreen = ({ navigation }) => {
         </View>
       ) : (
         <FlatList
-          data={users}
+          data={sortedUsers}
           keyExtractor={(item) => item.uid}
           renderItem={renderUserItem}
           contentContainerStyle={styles.listContent}
@@ -201,7 +385,7 @@ const ChatListScreen = ({ navigation }) => {
           ListHeaderComponent={
             <View style={styles.listHeader}>
               <Text style={styles.listHeaderText}>
-                Available Users ({users.length})
+                Available Users ({sortedUsers.length})
               </Text>
             </View>
           }
@@ -293,8 +477,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e9ecef',
   },
+  unreadUserItem: {
+    backgroundColor: '#e6f7ff',
+    borderColor: '#91d5ff',
+  },
   avatarContainer: {
     marginRight: wp('3%'),
+    position: 'relative',
   },
   avatar: {
     width: wp('12%'),
@@ -311,6 +500,23 @@ const styles = StyleSheet.create({
     fontSize: wp('4.5%'),
     fontWeight: '600',
   },
+  unreadBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: '#ff4d4f',
+    borderRadius: wp('3%'),
+    minWidth: wp('5%'),
+    height: wp('5%'),
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: wp('1%'),
+  },
+  unreadText: {
+    color: '#fff',
+    fontSize: wp('2.5%'),
+    fontWeight: 'bold',
+  },
   userInfo: {
     flex: 1,
     marginRight: wp('3%'),
@@ -321,9 +527,29 @@ const styles = StyleSheet.create({
     color: '#2f3542',
     marginBottom: hp('0.5%'),
   },
+  unreadUserName: {
+    fontWeight: 'bold',
+    color: '#1890ff',
+  },
   userEmail: {
     fontSize: wp('3.5%'),
     color: '#747d8c',
+  },
+  lastMessage: {
+    fontSize: wp('3.5%'),
+    color: '#747d8c',
+  },
+  unreadLastMessage: {
+    fontWeight: '600',
+    color: '#1890ff',
+  },
+  rightContainer: {
+    alignItems: 'flex-end',
+  },
+  timestamp: {
+    fontSize: wp('3%'),
+    color: '#999',
+    marginBottom: hp('0.5%'),
   },
   emptyContainer: {
     flex: 1,

@@ -1,25 +1,32 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { Audio } from 'expo-av';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import { onAuthStateChanged } from 'firebase/auth';
 import { get, off, onValue, orderByChild, push, query, ref, set, update } from 'firebase/database';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   FlatList,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View
 } from 'react-native';
 import {
   heightPercentageToDP as hp,
   widthPercentageToDP as wp,
 } from 'react-native-responsive-screen';
+import EmojiPicker from 'rn-emoji-keyboard';
 import { auth, database } from '../firebaseConfig';
 
 const ChatScreen = ({ route, navigation }) => {
@@ -32,6 +39,18 @@ const ChatScreen = ({ route, navigation }) => {
   const [chatInitialized, setChatInitialized] = useState(false);
   const [sending, setSending] = useState(false);
   const flatListRef = useRef(null);
+  
+  // New states for media features
+  const [showMediaDrawer, setShowMediaDrawer] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [recording, setRecording] = useState(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordTime, setRecordTime] = useState(0);
+  const [audioPermission, setAudioPermission] = useState(null);
+  const recordTimeRef = useRef(null);
+
+  const drawerAnimation = useRef(new Animated.Value(0)).current;
+  const drawerHeight = hp('30%');
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
@@ -45,13 +64,60 @@ const ChatScreen = ({ route, navigation }) => {
       }
     });
 
+    // Request audio permissions
+    (async () => {
+      const { status } = await Audio.requestPermissionsAsync();
+      setAudioPermission(status === 'granted');
+    })();
+
     return () => {
       unsubscribeAuth();
       // Clean up the realtime listener when component unmounts
       const messagesRef = ref(database, `chats/${chatId}/messages`);
       off(messagesRef);
+      
+      // Stop recording if component unmounts
+      if (recording) {
+        recording.stopAndUnloadAsync();
+      }
+      if (recordTimeRef.current) {
+        clearInterval(recordTimeRef.current);
+      }
     };
   }, [chatId]);
+
+  useEffect(() => {
+    if (showMediaDrawer) {
+      Animated.spring(drawerAnimation, {
+        toValue: 1,
+        useNativeDriver: true,
+        bounciness: 0,
+      }).start();
+    } else {
+      Animated.spring(drawerAnimation, {
+        toValue: 0,
+        useNativeDriver: true,
+        bounciness: 0,
+      }).start();
+    }
+  }, [showMediaDrawer]);
+
+  const translateY = drawerAnimation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [drawerHeight, 0],
+  });
+
+  const openMediaDrawer = () => {
+    setShowMediaDrawer(true);
+  };
+
+  const closeMediaDrawer = () => {
+    Animated.spring(drawerAnimation, {
+      toValue: 0,
+      useNativeDriver: true,
+      bounciness: 0,
+    }).start(() => setShowMediaDrawer(false));
+  };
 
   const initializeChat = async (user) => {
     try {
@@ -59,7 +125,6 @@ const ChatScreen = ({ route, navigation }) => {
       const chatSnapshot = await get(chatRef);
       
       if (!chatSnapshot.exists()) {
-        
         await set(chatRef, {
           participants: {
             [user.uid]: true,
@@ -134,8 +199,8 @@ const ChatScreen = ({ route, navigation }) => {
     });
   };
 
-  const handleSendMessage = async () => {
-    if (!messageText.trim() || !currentUser || sending) return;
+  const handleSendMessage = async (text = messageText, type = 'text', mediaUrl = null) => {
+    if ((!text.trim() && !mediaUrl) || !currentUser || sending) return;
     
     setSending(true);
     try {
@@ -145,6 +210,14 @@ const ChatScreen = ({ route, navigation }) => {
       // Check if chat exists and get current data
       const chatSnapshot = await get(chatRef);
       
+      const messagePreview = type === 'text' 
+        ? text.trim() 
+        : type === 'image' 
+          ? '📷 Image' 
+          : type === 'audio' 
+            ? '🎤 Audio message' 
+            : '📎 Attachment';
+      
       if (!chatSnapshot.exists()) {
         // Create the chat structure if it doesn't exist
         await set(chatRef, {
@@ -152,13 +225,13 @@ const ChatScreen = ({ route, navigation }) => {
             [currentUser.uid]: true,
             [recipient.uid]: true
           },
-          lastMessage: messageText.trim(),
+          lastMessage: messagePreview,
           lastMessageTime: Date.now(),
         });
       } else {
         // Only update last message and time for existing chats
         await update(chatRef, {
-          lastMessage: messageText.trim(),
+          lastMessage: messagePreview,
           lastMessageTime: Date.now(),
         });
       }
@@ -169,14 +242,21 @@ const ChatScreen = ({ route, navigation }) => {
       
       const messageData = {
         id: newMessageRef.key,
-        text: messageText.trim(),
+        text: text.trim(),
         senderId: currentUser.uid,
         timestamp: Date.now(),
+        type,
       };
+      
+      if (mediaUrl) {
+        messageData.mediaUrl = mediaUrl;
+      }
       
       await set(newMessageRef, messageData);
       
-      setMessageText('');
+      if (type === 'text') {
+        setMessageText('');
+      }
     } catch (error) {
       console.error('Error sending message:', error);
       
@@ -191,6 +271,142 @@ const ChatScreen = ({ route, navigation }) => {
     } finally {
       setSending(false);
     }
+  };
+
+  const pickImage = async () => {
+    closeMediaDrawer();
+    
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled) {
+        // Here you would typically upload the image to storage
+        // and get a URL, then call handleSendMessage with the URL
+        const imageUrl = result.assets[0].uri;
+        handleSendMessage('', 'image', imageUrl);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image');
+    }
+  };
+
+  const takePhoto = async () => {
+    closeMediaDrawer();
+    
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Camera permission is required to take photos');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled) {
+        // Upload image and send message
+        const imageUrl = result.assets[0].uri;
+        handleSendMessage('', 'image', imageUrl);
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Error', 'Failed to take photo');
+    }
+  };
+
+  const pickDocument = async () => {
+    closeMediaDrawer();
+    
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+      });
+
+      if (result.type === 'success') {
+        // Upload file and send message
+        const fileUrl = result.uri;
+        handleSendMessage(result.name, 'file', fileUrl);
+      }
+    } catch (error) {
+      console.error('Error picking document:', error);
+      Alert.alert('Error', 'Failed to pick document');
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      if (audioPermission !== 'granted') {
+        Alert.alert('Permission needed', 'Microphone permission is required to record audio');
+        return;
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY
+      );
+
+      setRecording(recording);
+      setIsRecording(true);
+      
+      // Start timer
+      setRecordTime(0);
+      recordTimeRef.current = setInterval(() => {
+        setRecordTime(prev => prev + 1);
+      }, 1000);
+    } catch (error) {
+      console.error('Failed to start recording', error);
+      Alert.alert('Error', 'Failed to start recording');
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!recording) return;
+    
+    try {
+      await recording.stopAndUnloadAsync();
+      setIsRecording(false);
+      
+      if (recordTimeRef.current) {
+        clearInterval(recordTimeRef.current);
+        recordTimeRef.current = null;
+      }
+      
+      const uri = recording.getURI();
+      
+      // Send audio message
+      handleSendMessage('', 'audio', uri);
+      
+      setRecording(null);
+      setRecordTime(0);
+    } catch (error) {
+      console.error('Failed to stop recording', error);
+      Alert.alert('Error', 'Failed to stop recording');
+    }
+  };
+
+  const formatRecordTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
+  const handleEmojiPick = (emojiObject) => {
+    setMessageText(prevText => prevText + emojiObject.emoji);
   };
 
   const renderMessage = ({ item }) => {
@@ -221,9 +437,32 @@ const ChatScreen = ({ route, navigation }) => {
           styles.messageBubble,
           isCurrentUser ? styles.currentUserBubble : styles.otherUserBubble
         ]}>
-          <Text style={isCurrentUser ? styles.currentUserText : styles.otherUserText}>
-            {item.text}
-          </Text>
+          {item.type === 'image' && item.mediaUrl ? (
+            <Image 
+              source={{ uri: item.mediaUrl }} 
+              style={styles.mediaPreview}
+              resizeMode="cover"
+            />
+          ) : item.type === 'audio' && item.mediaUrl ? (
+            <View style={styles.audioMessage}>
+              <MaterialIcons name="audiotrack" size={24} color={isCurrentUser ? 'white' : '#4a69bd'} />
+              <Text style={[styles.audioDuration, { color: isCurrentUser ? 'rgba(255,255,255,0.7)' : 'rgba(47,53,66,0.5)' }]}>
+                0:30
+              </Text>
+            </View>
+          ) : item.type === 'file' && item.mediaUrl ? (
+            <View style={styles.fileMessage}>
+              <MaterialIcons name="insert-drive-file" size={24} color={isCurrentUser ? 'white' : '#4a69bd'} />
+              <Text style={[styles.fileName, { color: isCurrentUser ? 'white' : '#2f3542' }]} numberOfLines={1}>
+                {item.text}
+              </Text>
+            </View>
+          ) : (
+            <Text style={isCurrentUser ? styles.currentUserText : styles.otherUserText}>
+              {item.text}
+            </Text>
+          )}
+          
           <Text style={[
             styles.timestamp,
             isCurrentUser ? styles.currentUserTimestamp : styles.otherUserTimestamp
@@ -337,11 +576,37 @@ const ChatScreen = ({ route, navigation }) => {
         }
       />
 
+      {isRecording && (
+        <View style={styles.recordingContainer}>
+          <View style={styles.recordingIndicator}>
+            <View style={styles.recordingDot} />
+            <Text style={styles.recordingText}>Recording... {formatRecordTime(recordTime)}</Text>
+          </View>
+          <TouchableOpacity onPress={stopRecording} style={styles.stopButton}>
+            <Text style={styles.stopButtonText}>Stop</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? hp('6%') : 0}
         style={styles.inputContainer}
       >
+        <TouchableOpacity 
+          onPress={() => setShowEmojiPicker(true)}
+          style={styles.emojiButton}
+        >
+          <Ionicons name="happy-outline" size={wp('5.5%')} color="#747d8c" />
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          onPress={openMediaDrawer}
+          style={styles.attachButton}
+        >
+          <Ionicons name="add" size={wp('5.5%')} color="#747d8c" />
+        </TouchableOpacity>
+        
         <TextInput
           style={styles.textInput}
           value={messageText}
@@ -351,18 +616,97 @@ const ChatScreen = ({ route, navigation }) => {
           multiline
           maxLength={500}
         />
-        <TouchableOpacity
-          style={[styles.sendButton, (!messageText.trim() || sending) && styles.disabledButton]}
-          onPress={handleSendMessage}
-          disabled={!messageText.trim() || sending}
-        >
-          {sending ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Ionicons name="send" size={wp('4.5%')} color="#fff" />
-          )}
-        </TouchableOpacity>
+        
+        {messageText.trim() ? (
+          <TouchableOpacity
+            style={[styles.sendButton, sending && styles.disabledButton]}
+            onPress={() => handleSendMessage()}
+            disabled={sending}
+          >
+            {sending ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Ionicons name="send" size={wp('4.5%')} color="#fff" />
+            )}
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            onPress={startRecording}
+            style={styles.micButton}
+          >
+            <Ionicons name="mic" size={wp('5.5%')} color="#747d8c" />
+          </TouchableOpacity>
+        )}
       </KeyboardAvoidingView>
+
+      {/* Media Picker Bottom Sheet */}
+      {showMediaDrawer && (
+        <Modal
+          transparent
+          visible={showMediaDrawer}
+          animationType="none"
+          onRequestClose={closeMediaDrawer}
+        >
+          <TouchableWithoutFeedback onPress={closeMediaDrawer}>
+            <View style={styles.drawerOverlay} />
+          </TouchableWithoutFeedback>
+          
+          <Animated.View 
+            style={[
+              styles.mediaDrawer,
+              { transform: [{ translateY }] }
+            ]}
+          >
+            <View style={styles.drawerHandle} />
+            
+            <View style={styles.mediaOptions}>
+              <TouchableOpacity style={styles.mediaOption} onPress={takePhoto}>
+                <View style={[styles.mediaOptionIcon, { backgroundColor: '#4a69bd' }]}>
+                  <Ionicons name="camera" size={wp('6%')} color="white" />
+                </View>
+                <Text style={styles.mediaOptionText}>Camera</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity style={styles.mediaOption} onPress={pickImage}>
+                <View style={[styles.mediaOptionIcon, { backgroundColor: '#e74c3c' }]}>
+                  <Ionicons name="image" size={wp('6%')} color="white" />
+                </View>
+                <Text style={styles.mediaOptionText}>Gallery</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity style={styles.mediaOption} onPress={pickDocument}>
+                <View style={[styles.mediaOptionIcon, { backgroundColor: '#f39c12' }]}>
+                  <Ionicons name="document" size={wp('6%')} color="white" />
+                </View>
+                <Text style={styles.mediaOptionText}>Document</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </Modal>
+      )}
+
+      {/* Emoji Picker */}
+      <EmojiPicker
+        onEmojiSelected={handleEmojiPick}
+        open={showEmojiPicker}
+        onClose={() => setShowEmojiPicker(false)}
+        theme={{
+          backdrop: '#00000080',
+          container: '#f8f9fa',
+          header: '#4a69bd',
+          skinTonesContainer: '#ffffff',
+          category: {
+            icon: '#4a69bd',
+            iconActive: '#1e3a8a'
+          },
+          search: {
+            background: '#ffffff',
+            placeholder: '#747d8c',
+            icon: '#747d8c',
+            text: '#2f3542'
+          }
+        }}
+      />
     </SafeAreaView>
   );
 };
@@ -449,7 +793,7 @@ const styles = StyleSheet.create({
   messagesContent: {
     padding: wp('4%'),
     paddingBottom: hp('1%'),
-    flexGrow: 1, // This ensures content starts from bottom
+    flexGrow: 1,
     justifyContent: 'flex-end',
   },
   messageContainer: {
@@ -514,6 +858,31 @@ const styles = StyleSheet.create({
     fontSize: wp('4%'),
     lineHeight: hp('2.5%'),
   },
+  mediaPreview: {
+    width: wp('60%'),
+    height: wp('45%'),
+    borderRadius: wp('2%'),
+    marginBottom: hp('1%'),
+  },
+  audioMessage: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: hp('1%'),
+  },
+  audioDuration: {
+    marginLeft: wp('2%'),
+    fontSize: wp('3.5%'),
+  },
+  fileMessage: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: hp('1%'),
+  },
+  fileName: {
+    marginLeft: wp('2%'),
+    fontSize: wp('3.5%'),
+    maxWidth: wp('45%'),
+  },
   timestamp: {
     fontSize: wp('2.5%'),
     marginTop: hp('0.5%'),
@@ -533,6 +902,16 @@ const styles = StyleSheet.create({
     borderTopColor: '#f1f2f6',
     alignItems: 'flex-end',
   },
+  emojiButton: {
+    padding: wp('2%'),
+    marginRight: wp('1%'),
+    marginBottom: wp('1%'),
+  },
+  attachButton: {
+    padding: wp('2%'),
+    marginRight: wp('2%'),
+    marginBottom: wp('1%'),
+  },
   textInput: {
     flex: 1,
     borderWidth: 1,
@@ -547,6 +926,14 @@ const styles = StyleSheet.create({
   },
   sendButton: {
     backgroundColor: '#4a69bd',
+    width: wp('13%'),
+    height: wp('13%'),
+    borderRadius: wp('6.5%'),
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: wp('0.5%'),
+  },
+  micButton: {
     width: wp('13%'),
     height: wp('13%'),
     borderRadius: wp('6.5%'),
@@ -576,6 +963,82 @@ const styles = StyleSheet.create({
     fontSize: wp('3.5%'),
     color: '#747d8c',
     textAlign: 'center',
+  },
+  drawerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  mediaDrawer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    borderTopLeftRadius: wp('5%'),
+    borderTopRightRadius: wp('5%'),
+    padding: wp('5%'),
+    paddingBottom: hp('5%'),
+  },
+  drawerHandle: {
+    width: wp('15%'),
+    height: wp('1.5%'),
+    backgroundColor: '#ddd',
+    borderRadius: wp('1%'),
+    alignSelf: 'center',
+    marginBottom: hp('2%'),
+  },
+  mediaOptions: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  mediaOption: {
+    alignItems: 'center',
+  },
+  mediaOptionIcon: {
+    width: wp('15%'),
+    height: wp('15%'),
+    borderRadius: wp('3%'),
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: hp('1%'),
+  },
+  mediaOptionText: {
+    fontSize: wp('3.5%'),
+    color: '#2f3542',
+    marginTop: hp('0.5%'),
+  },
+  recordingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: wp('4%'),
+    backgroundColor: '#ff6b6b',
+  },
+  recordingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  recordingDot: {
+    width: wp('3%'),
+    height: wp('3%'),
+    borderRadius: wp('1.5%'),
+    backgroundColor: 'white',
+    marginRight: wp('3%'),
+  },
+  recordingText: {
+    color: 'white',
+    fontSize: wp('4%'),
+    fontWeight: '500',
+  },
+  stopButton: {
+    paddingHorizontal: wp('4%'),
+    paddingVertical: wp('2%'),
+    backgroundColor: 'white',
+    borderRadius: wp('2%'),
+  },
+  stopButtonText: {
+    color: '#ff6b6b',
+    fontWeight: 'bold',
   },
 });
 
